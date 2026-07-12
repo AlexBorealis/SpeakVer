@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  speakver-app:
+    build: .
+    container_name: speakver_container
+    ports:
+      - "8501:8501" # Пробрасывает порт наружу (Локальный:Контейнер)
+    volumes:
+      # Формат: ./папка_на_хосте:/app/папка_в_контейнере
+      - ./datasets:/app/datasets          # Датасеты монтируются из локальной папки
+      - ./reports:/app/reports            # Отчеты будут сохраняться на ваш ПК
+      - ./experiments:/app/experiments    # Папка с экспериментами сохраняется локально
+      - ./debug_audio:/app/debug_audio    # Для отладочных аудиофайлов
+    restart: unless-stopped

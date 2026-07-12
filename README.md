@@ -93,9 +93,6 @@ python app.py
 
 ---
 
-## 📝 Лицензия
-Этот проект распространяется под лицензией MIT. Подробности см. в файле [LICENSE](LICENSE) (если применим).
-
 ## 👤 Контакты
 * Автор: **AlexBorealis**
 * Ссылка на проект: [https://github.com/AlexBorealis/SpeakVer](https://github.com/AlexBorealis/SpeakVer)
