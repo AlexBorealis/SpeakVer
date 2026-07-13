@@ -5,11 +5,18 @@ services:
     build: .
     container_name: speakver_container
     ports:
-      - "8501:8501" # Пробрасывает порт наружу (Локальный:Контейнер)
+      - "7860:7860" # Порт для доступа к Gradio (Хост:Контейнер)
     volumes:
-      # Формат: ./папка_на_хосте:/app/папка_в_контейнере
-      - ./datasets:/app/datasets          # Датасеты монтируются из локальной папки
-      - ./reports:/app/reports            # Отчеты будут сохраняться на ваш ПК
-      - ./experiments:/app/experiments    # Папка с экспериментами сохраняется локально
-      - ./debug_audio:/app/debug_audio    # Для отладочных аудиофайлов
+      # Тяжелые папки и результаты работы монтируются локально
+      - ./datasets:/app/datasets
+      - ./reports:/app/reports
+      - ./experiments:/app/experiments
+      - ./debug_audio:/app/debug_audio
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all # Предоставляет контейнеру доступ ко всем GPU хоста
+              capabilities: [gpu]
     restart: unless-stopped

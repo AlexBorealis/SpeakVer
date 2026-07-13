@@ -1,34 +1,41 @@
-# Используем официальный легковесный образ Python 3.12
-FROM python:3.12-slim
+# Используем официально существующий образ NVIDIA на базе Ubuntu 24.04 с CUDA 12.6
+FROM nvidia/cuda:12.6.0-runtime-ubuntu24.04
 
-# Устанавливаем системные зависимости для работы со звуком
+# Отключаем интерактивные диалоги
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Устанавливаем системные аудио-зависимости, компилятор и стандартный python3-pip
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    python3-dev \
     libsndfile1 \
     ffmpeg \
     gcc \
-    python3-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Копируем зависимости
+# Копируем список зависимостей
 COPY requirements.txt .
 
-# Обновляем pip и ставим зависимости (включая setuptools на случай компиляции C-расширений)
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+# Встроенный в Ubuntu 24.04 Python 3.12 ставит зависимости без конфликтов
+RUN python3 -m pip install --no-cache-dir --break-system-packages --ignore-installed -r requirements.txt
 
-# Копируем только исходный код, модели по умолчанию и конфиги
+# Копируем только логику приложения и модели по умолчанию
 COPY src/ ./src/
 COPY pretrained_models/ ./pretrained_models/
 COPY app.py .
 
-# Создаем пустые папки для автоматического монтирования томов
+# Создаем директории под автоматическое монтирование внешних томов
 RUN mkdir -p datasets reports experiments debug_audio
 
-# Открываем порт для приложения
-EXPOSE 8501
+# Стандартный порт для Gradio
+EXPOSE 7860
 
-# Запуск приложения
-CMD ["python", "app.py"]
+# Настройка переменных окружения для Gradio внутри Docker
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+ENV GRADIO_SERVER_PORT=7860
+
+# Запуск вашего Gradio приложения
+CMD ["python3", "app.py"]
