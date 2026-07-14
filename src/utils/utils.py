@@ -7,36 +7,23 @@ import random
 
 from src.train.speaker_dataset import SpeakerDataset
 
+
 def has_speaker_dirs(path):
     path = Path(path)
 
     if not path.exists():
         return False
 
-    return any(
-        item.is_dir()
-        for item in path.iterdir()
-    )
+    return any(item.is_dir() for item in path.iterdir())
 
 
-def load_checkpoint(
-    path,
-    extractor,
-    criterion=None
-):
-    ckpt = torch.load(
-        path,
-        map_location="cpu"
-    )
+def load_checkpoint(path, extractor, criterion=None):
+    ckpt = torch.load(path, map_location="cpu")
 
-    extractor.load_state_dict(
-        ckpt["encoder"]
-    )
+    extractor.load_state_dict(ckpt["encoder"])
 
     if criterion:
-        criterion.load_state_dict(
-            ckpt["criterion"]
-        )
+        criterion.load_state_dict(ckpt["criterion"])
 
     return extractor
 
@@ -49,11 +36,9 @@ def split_dataset(
     seed=42,
     split_key="speaker_id",
     persistent=False,
-    output_dir="speaker_dataset"
+    output_dir="speaker_dataset",
 ):
-    assert abs(
-        train_ratio + val_ratio + test_ratio - 1.0
-    ) < 1e-6
+    assert abs(train_ratio + val_ratio + test_ratio - 1.0) < 1e-6
 
     output_dir = Path(output_dir)
 
@@ -74,17 +59,12 @@ def split_dataset(
             return (
                 SpeakerDataset(str(train_dir), return_audio=False),
                 SpeakerDataset(str(val_dir), return_audio=False),
-                SpeakerDataset(str(test_dir), return_audio=False)
+                SpeakerDataset(str(test_dir), return_audio=False),
             )
 
     random.seed(seed)
 
-    speakers = list(
-        set(
-            item[split_key]
-            for item in dataset
-        )
-    )
+    speakers = list(set(item[split_key] for item in dataset))
 
     random.shuffle(speakers)
 
@@ -96,15 +76,11 @@ def split_dataset(
     splits = {
         "train": set(speakers[:train_end]),
         "val": set(speakers[train_end:val_end]),
-        "test": set(speakers[val_end:])
+        "test": set(speakers[val_end:]),
     }
 
     if not persistent:
-        indices = {
-            "train": [],
-            "val": [],
-            "test": []
-        }
+        indices = {"train": [], "val": [], "test": []}
 
         for i, item in enumerate(dataset):
             for name, spks in splits.items():
@@ -114,13 +90,10 @@ def split_dataset(
         return (
             Subset(dataset, indices["train"]),
             Subset(dataset, indices["val"]),
-            Subset(dataset, indices["test"])
+            Subset(dataset, indices["test"]),
         )
 
-    output_dir.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     source_root = dataset.root_dir
 
@@ -138,24 +111,19 @@ def split_dataset(
     return (
         SpeakerDataset(str(output_dir / "train")),
         SpeakerDataset(str(output_dir / "val")),
-        SpeakerDataset(str(output_dir / "test"))
+        SpeakerDataset(str(output_dir / "test")),
     )
 
 
 def get_audio_input(item):
-    keys = [
-        "audio.throat_microphone",
-        "path",
-        "audio"
-    ]
+    keys = ["audio.throat_microphone", "path", "audio"]
 
     for key in keys:
         if key in item:
             return item[key]
 
-    raise KeyError(
-        f"Audio field not found. Available keys: {item.keys()}"
-    )
+    raise KeyError(f"Audio field not found. Available keys: {item.keys()}")
+
 
 def get_sample_key(sample):
     if "path" in sample:

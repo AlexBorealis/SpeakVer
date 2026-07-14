@@ -10,14 +10,14 @@ from src.utils.utils import get_audio_input, get_sample_key
 class Trainer:
     def __init__(
         self,
-        builder,        
+        builder,
         train_preprocessor,
         val_preprocessor,
         metrics,
         encoder,
         criterion,
         optimizer,
-        save_dir="runs/speaker_train/exp"
+        save_dir="runs/speaker_train/exp",
     ):
         self.builder = builder
         self.train_preprocessor = train_preprocessor
@@ -27,11 +27,7 @@ class Trainer:
         self.criterion = criterion
         self.optimizer = optimizer
 
-        self.device = (
-            "cuda"
-            if torch.cuda.is_available()
-            else "cpu"
-        )
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.encoder.to(self.device)
         self.criterion.to(self.device)
@@ -39,10 +35,7 @@ class Trainer:
         self.save_dir = Path(save_dir)
         self.weights = self.save_dir / "weights"
 
-        self.weights.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+        self.weights.mkdir(parents=True, exist_ok=True)
 
         self.best_eer = float("inf")
 
@@ -59,10 +52,7 @@ class Trainer:
 
             embeddings = self.encoder(waveforms)
 
-            loss, _ = self.criterion(
-                embeddings,
-                labels
-            )
+            loss, _ = self.criterion(embeddings, labels)
 
             self.optimizer.zero_grad()
 
@@ -72,18 +62,11 @@ class Trainer:
 
             total_loss += loss.item()
 
-            pbar.set_postfix(
-                loss=f"{loss.item():.4f}"
-            )
-
+            pbar.set_postfix(loss=f"{loss.item():.4f}")
 
         return total_loss / len(loader)
 
-
-    def validate(
-        self,
-        dataset
-    ):
+    def validate(self, dataset):
         self.encoder.eval()
 
         pairs = self.builder.build(dataset)
@@ -95,52 +78,28 @@ class Trainer:
             sample1 = pair["sample1"]
             sample2 = pair["sample2"]
 
-            unique_samples[
-                get_sample_key(sample1)
-            ] = sample1
+            unique_samples[get_sample_key(sample1)] = sample1
 
-            unique_samples[
-                get_sample_key(sample2)
-            ] = sample2
-            
+            unique_samples[get_sample_key(sample2)] = sample2
+
         with torch.no_grad():
-            for key, sample in tqdm(
-                unique_samples.items(),
-                desc="Extract embeddings"
-            ):
-                waveform = self.val_preprocessor.load_audio(
-                    get_audio_input(sample)
-                )
+            for key, sample in tqdm(unique_samples.items(), desc="Extract embeddings"):
+                waveform = self.val_preprocessor.load_audio(get_audio_input(sample))
 
-                embedding_cache[key] = (
-                    self.encoder.extract(
-                        waveform
-                    )
-                )
+                embedding_cache[key] = self.encoder.extract(waveform)
 
             scores = []
             labels = []
 
-        for pair in tqdm(
-            pairs,
-            desc="Cosine similarity"
-        ):
+        for pair in tqdm(pairs, desc="Cosine similarity"):
             sample1 = pair["sample1"]
             sample2 = pair["sample2"]
 
-            emb1 = embedding_cache[
-                get_sample_key(sample1)
-            ]
+            emb1 = embedding_cache[get_sample_key(sample1)]
 
-            emb2 = embedding_cache[
-                get_sample_key(sample2)
-            ]
+            emb2 = embedding_cache[get_sample_key(sample2)]
 
-            score = F.cosine_similarity(
-                emb1,
-                emb2,
-                dim=0
-            )
+            score = F.cosine_similarity(emb1, emb2, dim=0)
 
             scores.append(score.item())
             labels.append(pair["label"])
@@ -148,31 +107,13 @@ class Trainer:
         scores = torch.tensor(scores)
         labels = torch.tensor(labels)
 
-        threshold = self.metrics.find_best_threshold(
-            scores,
-            labels
-        )
+        threshold = self.metrics.find_best_threshold(scores, labels)
 
-        result = self.metrics.evaluate(
-            labels,
-            scores,
-            threshold
-        )
+        result = self.metrics.evaluate(labels, scores, threshold)
 
-        return {
-            "metrics": result,
-            "pairs": pairs,
-            "labels": labels,
-            "scores": scores
-        }
+        return {"metrics": result, "pairs": pairs, "labels": labels, "scores": scores}
 
-
-    def save_checkpoint(
-        self,
-        epoch,
-        train_loss,
-        metrics
-    ):
+    def save_checkpoint(self, epoch, train_loss, metrics):
         checkpoint = {
             "epoch": epoch,
             "encoder": self.encoder.state_dict(),
@@ -182,18 +123,12 @@ class Trainer:
             "eer": metrics["metrics"]["eer"],
             "roc_auc": metrics["metrics"]["roc_auc"],
             "accuracy": metrics["metrics"]["accuracy"],
-            "threshold": metrics["metrics"]["threshold"]
+            "threshold": metrics["metrics"]["threshold"],
         }
 
-        torch.save(
-            checkpoint,
-            self.weights / "last.pt"
-        )
+        torch.save(checkpoint, self.weights / "last.pt")
 
         if metrics["metrics"]["eer"] < self.best_eer:
             self.best_eer = metrics["metrics"]["eer"]
 
-            torch.save(
-                checkpoint,
-                self.weights / "best.pt"
-            )
+            torch.save(checkpoint, self.weights / "best.pt")

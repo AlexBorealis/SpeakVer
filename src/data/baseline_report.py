@@ -11,14 +11,7 @@ class BaselineReport:
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def save(
-        self,
-        metrics,
-        pairs,
-        scores,
-        labels,
-        plotter=None
-    ):
+    def save(self, metrics, pairs, scores, labels, plotter=None):
         if isinstance(scores, torch.Tensor):
             scores = scores.cpu().numpy()
 
@@ -38,17 +31,9 @@ class BaselineReport:
                 metrics_json[key] = value
 
         with open(
-            os.path.join(self.output_dir, "metrics.json"),
-            "w",
-            encoding="utf-8"
+            os.path.join(self.output_dir, "metrics.json"), "w", encoding="utf-8"
         ) as f:
-
-            json.dump(
-                metrics_json,
-                f,
-                indent=4,
-                ensure_ascii=False
-            )
+            json.dump(metrics_json, f, indent=4, ensure_ascii=False)
 
         rows = []
 
@@ -56,56 +41,41 @@ class BaselineReport:
             sample1 = pair["sample1"]
             sample2 = pair["sample2"]
 
-            rows.append({
-                "speaker1": sample1["speaker_id"],
-                "speaker2": sample2["speaker_id"],
-                "label": int(label),
-                "cosine_similarity": float(score)
-            })
+            rows.append(
+                {
+                    "speaker1": sample1["speaker_id"],
+                    "speaker2": sample2["speaker_id"],
+                    "label": int(label),
+                    "cosine_similarity": float(score),
+                }
+            )
 
         df = pd.DataFrame(rows)
 
-        df.to_csv(
-            os.path.join(self.output_dir, "pairs.csv"),
-            index=False
-        )
+        df.to_csv(os.path.join(self.output_dir, "pairs.csv"), index=False)
 
         if plotter is not None:
             plotter.plot_similarity(
                 labels,
                 scores,
                 threshold=metrics["threshold"],
-                save_path=os.path.join(
-                    self.output_dir,
-                    "similarity_distribution.png"
-                )
+                save_path=os.path.join(self.output_dir, "similarity_distribution.png"),
             )
 
             plotter.plot_roc(
-                metrics,
-                save_path=os.path.join(
-                    self.output_dir,
-                    "roc_curve.png"
-                )
+                metrics, save_path=os.path.join(self.output_dir, "roc_curve.png")
             )
 
             plotter.plot_confusion_matrix(
-                metrics,
-                save_path=os.path.join(
-                    self.output_dir,
-                    "confusion_matrix.png"
-                )
+                metrics, save_path=os.path.join(self.output_dir, "confusion_matrix.png")
             )
 
         positives = int(np.sum(labels))
         negatives = int(len(labels) - positives)
 
         with open(
-            os.path.join(self.output_dir, "summary.txt"),
-            "w",
-            encoding="utf-8"
+            os.path.join(self.output_dir, "summary.txt"), "w", encoding="utf-8"
         ) as f:
-
             f.write("ECAPA-TDNN BASELINE REPORT\n")
             f.write("=" * 60 + "\n\n")
 

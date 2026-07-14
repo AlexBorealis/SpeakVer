@@ -4,11 +4,7 @@ import matplotlib.pyplot as plt
 
 class Plotter:
     def plot_similarity(
-        self,
-        labels,
-        scores,
-        save_path="similarity_distribution.png",
-        threshold=None
+        self, labels, scores, save_path="similarity_distribution.png", threshold=None
     ):
         scores = np.asarray(scores)
         labels = np.asarray(labels)
@@ -23,7 +19,7 @@ class Plotter:
             bins=40,
             alpha=0.6,
             density=True,
-            label=f"Same speaker ({len(positive)})"
+            label=f"Same speaker ({len(positive)})",
         )
 
         plt.hist(
@@ -31,7 +27,7 @@ class Plotter:
             bins=40,
             alpha=0.6,
             density=True,
-            label=f"Different speaker ({len(negative)})"
+            label=f"Different speaker ({len(negative)})",
         )
 
         if threshold is not None:
@@ -39,7 +35,7 @@ class Plotter:
                 threshold,
                 linestyle="--",
                 linewidth=2,
-                label=f"Threshold = {threshold:.3f}"
+                label=f"Threshold = {threshold:.3f}",
             )
 
         plt.xlabel("Cosine similarity")
@@ -52,18 +48,14 @@ class Plotter:
         plt.savefig(save_path, dpi=300)
         plt.close()
 
-    def plot_roc(
-        self,
-        metrics,
-        save_path="roc_curve.png"
-    ):
+    def plot_roc(self, metrics, save_path="roc_curve.png"):
         plt.figure(figsize=(6, 6))
 
         plt.plot(
             metrics["fpr"],
             metrics["tpr"],
             linewidth=2,
-            label=f"AUC = {metrics['roc_auc']:.4f}"
+            label=f"AUC = {metrics['roc_auc']:.4f}",
         )
 
         plt.plot([0, 1], [0, 1], "--")
@@ -79,11 +71,7 @@ class Plotter:
         plt.savefig(save_path, dpi=300)
         plt.close()
 
-    def plot_confusion_matrix(
-        self,
-        metrics,
-        save_path="confusion_matrix.png"
-    ):
+    def plot_confusion_matrix(self, metrics, save_path="confusion_matrix.png"):
         cm = metrics["confusion_matrix"]
 
         plt.figure(figsize=(5, 5))
@@ -98,14 +86,7 @@ class Plotter:
 
         for i in range(2):
             for j in range(2):
-                plt.text(
-                    j,
-                    i,
-                    str(cm[i, j]),
-                    ha="center",
-                    va="center",
-                    fontsize=14
-                )
+                plt.text(j, i, str(cm[i, j]), ha="center", va="center", fontsize=14)
 
         plt.tight_layout()
 

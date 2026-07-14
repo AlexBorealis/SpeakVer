@@ -13,7 +13,7 @@ class SpeakerVerifier:
         self,
         checkpoint: Optional[str] = None,
         threshold: float = 0.65,
-        device: str = "cpu"
+        device: str = "cpu",
     ):
         self.device = device
         self.threshold = threshold
@@ -23,10 +23,7 @@ class SpeakerVerifier:
 
         if checkpoint is not None:
             print(f"Loading checkpoint: {checkpoint}")
-            self.model = load_checkpoint(
-                checkpoint,
-                self.model
-            )
+            self.model = load_checkpoint(checkpoint, self.model)
         else:
             print("Using default EmbeddingExtractor.")
 
@@ -42,25 +39,14 @@ class SpeakerVerifier:
         embedding = self.model.extract(wave)
 
         return embedding
-    
+
     @staticmethod
-    def cosine_similarity(
-        emb1,
-        emb2
-    ) -> float:
-        score = F.cosine_similarity(
-            emb1,
-            emb2,
-            dim=0
-        )
+    def cosine_similarity(emb1, emb2) -> float:
+        score = F.cosine_similarity(emb1, emb2, dim=0)
 
         return float(score.item())
-    
-    def compare_embeddings(
-        self,
-        emb1,
-        emb2
-    ):
+
+    def compare_embeddings(self, emb1, emb2):
 
         score = self.cosine_similarity(emb1, emb2)
 
@@ -70,19 +56,12 @@ class SpeakerVerifier:
         return {
             "same": score >= self.threshold,
             "score": score,
-            "confidence": confidence
+            "confidence": confidence,
         }
 
-    def compare_audio(
-        self,
-        audio1: str,
-        audio2: str
-    ):
+    def compare_audio(self, audio1: str, audio2: str):
 
         emb1 = self.get_embedding(audio1)
         emb2 = self.get_embedding(audio2)
 
-        return self.compare_embeddings(
-            emb1,
-            emb2
-        )
+        return self.compare_embeddings(emb1, emb2)

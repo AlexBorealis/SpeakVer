@@ -5,6 +5,8 @@
 draft
 docs
 results
+.continue
+speaker_dataset
 
 # Different files
 *.txt

@@ -21,20 +21,9 @@ class SpeakerDataset(Dataset):
             audio2.wav
     """
 
-    AUDIO_EXTENSIONS = {
-        ".wav",
-        ".flac",
-        ".mp3",
-        ".ogg",
-        ".m4a"
-    }
+    AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg", ".m4a"}
 
-    def __init__(
-        self,
-        root_dir,
-        preprocessor=None,
-        return_audio=True
-    ):
+    def __init__(self, root_dir, preprocessor=None, return_audio=True):
         super().__init__()
 
         self.root_dir = Path(root_dir)
@@ -57,15 +46,9 @@ class SpeakerDataset(Dataset):
             return sample
 
         # режим обучения
-        waveform = self.preprocessor.load_audio(
-            sample["path"]
-        )
+        waveform = self.preprocessor.load_audio(sample["path"])
 
-
-        return (
-            waveform.squeeze(0),
-            sample["speaker_index"]
-        )
+        return (waveform.squeeze(0), sample["speaker_index"])
 
     def get_speakers(self):
         return self.speakers
@@ -96,11 +79,13 @@ class SpeakerDataset(Dataset):
                 if file.suffix.lower() not in self.AUDIO_EXTENSIONS:
                     continue
 
-                self.samples.append({
-                    "speaker_id": speaker_name,
-                    "speaker_index": speaker_index,
-                    "path": str(file)
-                })
+                self.samples.append(
+                    {
+                        "speaker_id": speaker_name,
+                        "speaker_index": speaker_index,
+                        "path": str(file),
+                    }
+                )
 
             speaker_index += 1
 
@@ -144,7 +129,7 @@ class SpeakerDataset(Dataset):
             "mean": float(counts.mean()),
             "median": float(np.median(counts)),
             "std": float(counts.std()),
-            "distribution": counter
+            "distribution": counter,
         }
 
     def summary(self):
