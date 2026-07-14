@@ -64,7 +64,7 @@ print("=" * 60)
 # ============================================================
 checkpoint = os.path.join(
     "runs", "speaker_train", args.experiment, "weights", "best.pt"
-)
+) if args.experiment is not None else print("Using default model")
 print("Checkpoint:", checkpoint)
 
 # ============================================================

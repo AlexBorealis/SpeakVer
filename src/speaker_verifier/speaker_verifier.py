@@ -47,7 +47,6 @@ class SpeakerVerifier:
         return float(score.item())
 
     def compare_embeddings(self, emb1, emb2):
-
         score = self.cosine_similarity(emb1, emb2)
 
         confidence = (score + 1.0) / 2.0
@@ -60,7 +59,6 @@ class SpeakerVerifier:
         }
 
     def compare_audio(self, audio1: str, audio2: str):
-
         emb1 = self.get_embedding(audio1)
         emb2 = self.get_embedding(audio2)
 
