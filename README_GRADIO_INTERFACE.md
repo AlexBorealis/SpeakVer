@@ -23,14 +23,8 @@ make run
 Если в конфигурационном файле `.env` заданы пользователи
 
 ```text
-USER1_LOGIN=alex
+USER1_LOGIN=user
 USER1_PASSWORD=password
-
-USER2_LOGIN=tester
-USER2_PASSWORD=password
-
-USER3_LOGIN=demo
-USER3_PASSWORD=password
 ```
 
 то перед входом необходимо ввести логин и пароль.
