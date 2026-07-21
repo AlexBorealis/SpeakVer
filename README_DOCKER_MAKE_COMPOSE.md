@@ -280,14 +280,8 @@ docker run --rm --gpus all nvidia/cuda:12.6.0-runtime-ubuntu24.04 nvidia-smi
 Учетные записи задаются через файл окружения:
 
 ```env
-USER1_LOGIN=alex
+USER1_LOGIN=user
 USER1_PASSWORD=password
-
-USER2_LOGIN=tester
-USER2_PASSWORD=password
-
-USER3_LOGIN=demo
-USER3_PASSWORD=password
 ```
 
 При запуске приложения пользователю необходимо пройти авторизацию перед использованием сервиса.
