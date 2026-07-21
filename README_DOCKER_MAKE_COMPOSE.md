@@ -59,14 +59,8 @@ config/envs/.env
 Пример:
 
 ```env
-USER1_LOGIN=alex
+USER1_LOGIN=user
 USER1_PASSWORD=password
-
-USER2_LOGIN=tester
-USER2_PASSWORD=password
-
-USER3_LOGIN=demo
-USER3_PASSWORD=password
 ```
 
 ---
