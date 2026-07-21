@@ -30,7 +30,7 @@ parser.add_argument(
 parser.add_argument(
     "--save_dir",
     type=str,
-    default="runs/speaker_train/exp",
+    default="runs",
 )
 parser.add_argument(
     "--batch_size",
@@ -85,20 +85,6 @@ args = parser.parse_args()
 extractor = EmbeddingExtractor(
     trainable_blocks=args.trainable_blocks,
     device=args.device,
-)
-criterion = AAMSoftmax(
-    embedding_dim=192,
-    num_classes=1,  # будет заменено позже
-)
-optimizer = torch.optim.AdamW(
-    list(extractor.parameters()) + list(criterion.parameters()),
-    lr=1e-4,
-    weight_decay=1e-4,
-)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optimizer,
-    T_max=args.epochs,
-    eta_min=1e-6,
 )
 
 # ============================================================
@@ -162,7 +148,6 @@ val_dataset = SpeakerDataset(
 # Criterion
 # ============================================================
 criterion = AAMSoftmax(
-    embedding_dim=192,
     num_classes=train_dataset.get_num_speakers(),
 )
 optimizer = torch.optim.AdamW(
@@ -204,7 +189,7 @@ if args.model_path is not None:
 for epoch in range(start_epoch, args.epochs):
     train_loss = trainer.train(train_loader)
     val_metrics = trainer.validate(val_dataset)
-    
+
     trainer.save_checkpoint(
         epoch + 1,
         train_loss,

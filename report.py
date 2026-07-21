@@ -133,7 +133,6 @@ else:
 # Criterion
 # ============================================================
 criterion = AAMSoftmax(
-    embedding_dim=192,
     num_classes=test_dataset.get_num_speakers(),
 )
 

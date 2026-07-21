@@ -19,7 +19,7 @@ class Trainer:
         optimizer,
         scheduler=None,
         threshold=None,
-        save_dir="runs/speaker_train/exp",
+        save_dir="runs",
     ):
         self.builder = builder
         # TODO: поменять препроцессоры
@@ -41,8 +41,6 @@ class Trainer:
 
         self.save_dir = Path(save_dir)
         self.weights = self.save_dir / "weights"
-
-        self.weights.mkdir(parents=True, exist_ok=True)
 
         self.best_eer = float("inf")
 
@@ -100,9 +98,7 @@ class Trainer:
 
                 embedding_cache[key] = self.encoder.extract(waveform)
 
-        ################################################
         # Calculate cosine similarity
-        ################################################
         scores = []
         labels = []
 
@@ -139,6 +135,11 @@ class Trainer:
         return self.optimizer.param_groups[0]["lr"]
 
     def save_checkpoint(self, epoch, train_loss, metrics):
+        self.weights.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
         checkpoint = {
             # Training state
             "epoch": int(epoch),
@@ -174,7 +175,6 @@ class Trainer:
 
         Возвращает epoch, с которого необходимо продолжить обучение.
         """
-
         print("=" * 60)
         print(f"Loading checkpoint: {path}")
         print("=" * 60)
@@ -187,55 +187,44 @@ class Trainer:
 
         # Model
         self.encoder.load_state_dict(checkpoint["encoder"])
-
         # Criterion
         if checkpoint.get("criterion") is not None:
             self.criterion.load_state_dict(checkpoint["criterion"])
-
         # Optimizer
         if checkpoint.get("optimizer") is not None:
             self.optimizer.load_state_dict(checkpoint["optimizer"])
-
         # Scheduler
         if self.scheduler is not None and checkpoint.get("scheduler") is not None:
             self.scheduler.load_state_dict(checkpoint["scheduler"])
-
         # Best metric
         self.best_eer = checkpoint.get(
             "eer",
             float("inf"),
         )
-
         epoch = checkpoint.get(
             "epoch",
             0,
         )
-
         train_loss = checkpoint.get(
             "train_loss",
             None,
         )
-
         eer = checkpoint.get(
             "eer",
             None,
         )
-
         roc_auc = checkpoint.get(
             "roc_auc",
             None,
         )
-
         accuracy = checkpoint.get(
             "accuracy",
             None,
         )
-
         threshold = checkpoint.get(
             "threshold",
             None,
         )
-
         lr = checkpoint.get(
             "lr",
             None,
@@ -243,28 +232,21 @@ class Trainer:
 
         # Information
         print(f"Epoch      : {epoch}")
-
         if train_loss is not None:
             print(f"Train loss : {train_loss:.4f}")
-
         if eer is not None:
             print(f"EER        : {eer:.4f}")
-
         if roc_auc is not None:
             print(f"ROC-AUC    : {roc_auc:.4f}")
-
         if accuracy is not None:
             print(f"Accuracy   : {accuracy:.4f}")
-
         if threshold is not None:
             print(f"Threshold  : {threshold:.4f}")
-
         if lr is not None:
             print(f"LR         : {lr:.2e}")
         else:
             current_lr = self.optimizer.param_groups[0]["lr"]
             print(f"LR         : {current_lr:.2e} (current)")
-
         print("=" * 60)
 
         return epoch + 1

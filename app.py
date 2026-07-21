@@ -8,7 +8,7 @@ from src.speaker_verifier.speaker_verifier import SpeakerVerifier
 # ============================================================
 # Paths
 # ============================================================
-RUNS_DIR = "runs/speaker_train"
+RUNS_DIR = "runs"
 
 
 # ============================================================
