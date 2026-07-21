@@ -1,16 +1,3 @@
----
-title: SpeakVer
-emoji: 🎙️
-colorFrom: blue
-colorTo: indigo
-sdk: gradio
-sdk_version: "6.20.0"
-python_version: "3.12"
-app_file: app.py
-pinned: false
-license: apache-2.0
----
-
 # SpeakVer 🎙️
 
 **SpeakVer** — это система верификации и идентификации говорящего по голосу на базе архитектуры глубокого обучения ECAPA-TDNN (Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification). Проект включает в себя полный цикл разработки: от загрузки и предобработки аудиоданных до обучения моделей и развертывания веб-интерфейса для тестирования.
