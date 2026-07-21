@@ -345,4 +345,5 @@ with gr.Blocks(title="Speaker Verification") as demo:
                 outputs=report_log,
             )
 
-demo.launch()
+if __name__ == "__main__":
+    demo.launch()
