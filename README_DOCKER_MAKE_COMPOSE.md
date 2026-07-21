@@ -93,7 +93,7 @@ make run
 docker run \
     --gpus all \
     -p 127.0.0.1:7860:7860 \
-    --env-file config/envs/docker.env \
+    --env-file config/envs/.env \
     speakver-app
 ```
 
