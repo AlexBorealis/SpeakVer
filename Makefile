@@ -2,41 +2,65 @@ IMAGE_NAME = speakver-app
 CONTAINER_NAME = speakver_container
 PORT = 7860
 
-.PHONY: build run up down stop logs clean help
+# ============================================================
+# Host directories (can be overridden)
+# Example:
+# make run DATASET_DIR=/mnt/vibravox RUNS_DIR=/mnt/models
+# ============================================================
 
-help: ## Показать справку по командам
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+DATASET_DIR ?= $(PWD)/datasets
+RUNS_DIR ?= $(PWD)/runs
+REPORTS_DIR ?= $(PWD)/reports
+DEBUG_AUDIO_DIR ?= $(PWD)/debug_audio
 
-build: ## Собрать Docker-образ с CUDA и Python 3.12
+# ============================================================
+# Container directories
+# ============================================================
+
+CONTAINER_DATASET_DIR = /app/datasets
+CONTAINER_RUNS_DIR = /app/runs
+CONTAINER_REPORTS_DIR = /app/reports
+CONTAINER_DEBUG_AUDIO_DIR = /app/debug_audio
+
+.PHONY: help build run stop shell logs clean rebuild remove
+
+help: ## Show available commands
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
+
+build: ## Build Docker image
 	docker build -t $(IMAGE_NAME) .
 
-run: ## Запустить контейнер с поддержкой GPU и монтированием томов
+run: ## Run container with GPU support
 	docker run -d \
 		--name $(CONTAINER_NAME) \
 		--gpus all \
-		-p $(PORT):$(PORT) \
-		-v $$(pwd)/datasets:/app/datasets \
-		-v $$(pwd)/reports:/app/reports \
-		-v $$(pwd)/experiments:/app/experiments \
-		-v $$(pwd)/debug_audio:/app/debug_audio \
+		-p $(PORT):7860 \
+		-v $(DATASET_DIR):$(CONTAINER_DATASET_DIR) \
+		-v $(RUNS_DIR):$(CONTAINER_RUNS_DIR) \
+		-v $(REPORTS_DIR):$(CONTAINER_REPORTS_DIR) \
+		-v $(DEBUG_AUDIO_DIR):$(CONTAINER_DEBUG_AUDIO_DIR) \
+		-e DATASET_ROOT=$(CONTAINER_DATASET_DIR) \
+		-e RUNS_DIR=$(CONTAINER_RUNS_DIR)/speaker_train \
+		-e REPORT_DIR=$(CONTAINER_REPORTS_DIR) \
+		-e DEBUG_AUDIO_DIR=$(CONTAINER_DEBUG_AUDIO_DIR) \
 		--restart unless-stopped \
 		$(IMAGE_NAME)
 
-up: ## Собрать и запустить проект с GPU через docker-compose
-	docker-compose up --build -d
+stop: ## Stop and remove container
+	-docker stop $(CONTAINER_NAME)
+	-docker rm $(CONTAINER_NAME)
 
-down: ## Остановить и удалить контейнеры docker-compose
-	docker-compose down
-
-stop: ## Остановить одиночный контейнер (после make run)
-	docker stop $(CONTAINER_NAME) || true
-	docker rm $(CONTAINER_NAME) || true
-
-shell: ## Войти в терминал запущенного контейнера
+shell: ## Open bash inside container
 	docker exec -it $(CONTAINER_NAME) /bin/bash
 
-logs: ## Посмотреть живые логи Gradio приложения
+logs: ## Follow application logs
 	docker logs -f $(CONTAINER_NAME)
 
-clean: ## Очистить кэш Docker системных слоев
+remove: ## Remove Docker image
+	-docker rmi $(IMAGE_NAME)
+
+rebuild: stop build run ## Rebuild image and restart container
+
+clean: ## Remove unused Docker resources
 	docker system prune -f

@@ -1,13 +1,12 @@
 import numpy as np
-
 from sklearn.metrics import (
     accuracy_score,
+    confusion_matrix,
+    f1_score,
     precision_score,
     recall_score,
-    f1_score,
     roc_auc_score,
     roc_curve,
-    confusion_matrix,
 )
 
 
@@ -56,6 +55,7 @@ class Metrics:
         eer_index = np.nanargmin(np.abs(fnr - fpr))
         eer = (fnr[eer_index] + fpr[eer_index]) / 2
         cm = confusion_matrix(labels, predictions)
+        cm_norm = confusion_matrix(labels, predictions, normalize='true')
 
         return {
             "accuracy": accuracy,
@@ -66,6 +66,7 @@ class Metrics:
             "eer": eer,
             "threshold": threshold,
             "confusion_matrix": cm,
+            "confusion_matrix_normalized": cm_norm,
             "fpr": fpr,
             "tpr": tpr,
             "roc_thresholds": roc_thresholds,

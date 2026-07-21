@@ -1,4 +1,3 @@
-import datetime
 import os
 import subprocess
 
@@ -12,31 +11,61 @@ from src.speaker_verifier.speaker_verifier import SpeakerVerifier
 RUNS_DIR = "runs/speaker_train"
 
 
-def get_experiments():
-    """
-    Все папки экспериментов
-    """
+# ============================================================
+# Models utils
+# ============================================================
+def get_models():
     if not os.path.exists(RUNS_DIR):
         return []
 
     return sorted(
-        [d for d in os.listdir(RUNS_DIR) if os.path.isdir(os.path.join(RUNS_DIR, d))]
+        d for d in os.listdir(RUNS_DIR) if os.path.isdir(os.path.join(RUNS_DIR, d))
     )
 
 
 def get_checkpoints(exp_name):
-    """
-    Получение чекпоинтов выбранного эксперимента
-    """
-    if exp_name is None:
+    if not exp_name or exp_name == "Default model":
         return []
 
-    weights_dir = os.path.join(RUNS_DIR, exp_name, "weights")
+    weights_dir = os.path.join(
+        RUNS_DIR,
+        exp_name,
+        "weights",
+    )
 
     if not os.path.exists(weights_dir):
         return []
 
-    return sorted([f for f in os.listdir(weights_dir) if f.endswith(".pt")])
+    return sorted(f for f in os.listdir(weights_dir) if f.endswith(".pt"))
+
+
+def resolve_checkpoint(exp, checkpoint=None):
+    """
+    Возвращает абсолютный путь до чекпоинта.
+    None -> использовать предобученную SpeechBrain модель.
+    """
+    if exp is None or exp == "" or exp == "Default model":
+        return None
+
+    if checkpoint and checkpoint != "Default model":
+        path = os.path.join(
+            RUNS_DIR,
+            exp,
+            "weights",
+            checkpoint,
+        )
+    else:
+        path = os.path.join(
+            RUNS_DIR,
+            exp,
+            "weights",
+            "best.pt",
+        )
+
+    if os.path.exists(path):
+        return path
+
+    return None
 
 
 # ============================================================
@@ -44,8 +73,11 @@ def get_checkpoints(exp_name):
 # ============================================================
 current_checkpoint = None
 
-# Default model
-verifier = SpeakerVerifier(checkpoint=None, threshold=0.15, device="cpu")
+verifier = SpeakerVerifier(
+    checkpoint=None,
+    threshold=0.15,
+    device="cpu",
+)
 
 
 # ============================================================
@@ -55,31 +87,51 @@ def load_model(exp, checkpoint):
     global verifier
     global current_checkpoint
 
-    # Default model
-    if exp is None or exp == "" or checkpoint is None or checkpoint == "":
-        verifier = SpeakerVerifier(checkpoint=None, threshold=0.15, device="cpu")
-        current_checkpoint = None
-        return (
-            "Using default model: EmbeddingExtractor()",
-            gr.update(minimum=-1, maximum=1, value=0.15, step=0.01),
-        )
+    path = resolve_checkpoint(
+        exp,
+        checkpoint,
+    )
 
-    path = os.path.join(RUNS_DIR, exp, "weights", checkpoint)
-
-    verifier = SpeakerVerifier(checkpoint=path, threshold=0.15, device="cpu")
+    verifier = SpeakerVerifier(
+        checkpoint=path,
+        threshold=0.15,
+        device="cpu",
+    )
 
     current_checkpoint = path
 
-    return (f"Loaded:\n{path}", gr.update(minimum=-1, maximum=1, value=0.15, step=0.01))
+    if path is None:
+        status = "Using default SpeechBrain ECAPA-TDNN"
+    else:
+        status = f"Loaded checkpoint:\n{path}"
+
+    return (
+        status,
+        gr.update(
+            minimum=-1,
+            maximum=1,
+            value=0.15,
+            step=0.01,
+        ),
+    )
 
 
 # ============================================================
-# Dynamic dropdown callbacks
+# Dynamic checkpoint list
 # ============================================================
 def update_checkpoints(exp):
+    if exp is None or exp == "" or exp == "Default model":
+        return gr.update(
+            choices=["Default model"],
+            value="Default model",
+        )
+
     checkpoints = get_checkpoints(exp)
 
-    return gr.update(choices=checkpoints, value=checkpoints[0] if checkpoints else None)
+    return gr.update(
+        choices=["Default model"] + checkpoints,
+        value="Default model",
+    )
 
 
 # ============================================================
@@ -87,55 +139,80 @@ def update_checkpoints(exp):
 # ============================================================
 def compare(audio1, audio2, threshold):
     global verifier
-    if verifier is None:
-        verifier = SpeakerVerifier(checkpoint=None, threshold=threshold, device="cpu")
+
     if audio1 is None or audio2 is None:
-        return ("Please upload two audio files.", "", "")
+        return (
+            "Please upload two audio files.",
+            "",
+            "",
+        )
 
-    verifier.set_threshold(threshold)
+    verifier.threshold = threshold
 
-    result = verifier.compare_audio(audio1, audio2)
+    result = verifier.compare_audio(
+        audio1,
+        audio2,
+    )
 
     prediction = "SAME" if result["same"] else "DIFFERENT"
 
-    return (prediction, f"{result['confidence']:.4f}", f"{result['score']:.4f}")
+    return (
+        prediction,
+        f"{result['confidence']:.4f}",
+        f"{result['score']:.4f}",
+    )
 
 
 # ============================================================
 # Report
 # ============================================================
-def run_report(exp, report_dir, dataset_path):
-    # Создание папки отчета
-    if report_dir is None or report_dir.strip() == "":
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        output_dir = os.path.join("reports", f"report_{timestamp}")
-    else:
-        output_dir = os.path.join("reports", report_dir.strip())
-
-    os.makedirs(output_dir, exist_ok=True)
-
+def run_report(
+    model,
+    report_dir,
+    dataset_path,
+    balance,
+):
     cmd = [
         "python",
         "report.py",
-        "--output_dir",
-        output_dir,
         "--dataset_path",
         dataset_path,
     ]
-    # Только если выбран эксперимент
-    if exp is not None and exp.strip() != "":
-        cmd.extend(["--experiment", exp])
 
-    process = subprocess.run(cmd, capture_output=True, text=True)
+    checkpoint = resolve_checkpoint(model)
 
-    return f"Report directory:\n{output_dir}\n\n" + process.stdout + process.stderr
+    if checkpoint is not None:
+        cmd.extend(
+            [
+                "--model_path",
+                checkpoint,
+            ]
+        )
+
+    if report_dir and report_dir.strip():
+        cmd.extend(
+            [
+                "--output_dir",
+                report_dir.strip(),
+            ]
+        )
+
+    if not balance:
+        cmd.append("--no-balance")
+
+    process = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+    )
+
+    return process.stdout + process.stderr
 
 
 # ============================================================
 # UI
 # ============================================================
-experiments = get_experiments()
+models = get_models()
 
 with gr.Blocks(title="Speaker Verification") as demo:
     gr.Markdown("# Speaker Verification")
@@ -147,14 +224,20 @@ with gr.Blocks(title="Speaker Verification") as demo:
         with gr.Tab("Verification"):
             with gr.Row():
                 experiment = gr.Dropdown(
-                    choices=experiments,
-                    label="Training experiment",
-                    value=None if experiments else None,
+                    choices=["Default model"] + models,
+                    value="Default model",
+                    label="Experiment",
                 )
 
-                checkpoint = gr.Dropdown(label="Checkpoint", choices=[])
+                checkpoint = gr.Dropdown(
+                    choices=["Default model"],
+                    value="Default model",
+                    label="Checkpoint",
+                )
 
-            model_status = gr.Textbox(label="Model status")
+            model_status = gr.Textbox(
+                label="Model status",
+            )
 
             threshold = gr.Slider(
                 minimum=-1,
@@ -165,32 +248,55 @@ with gr.Blocks(title="Speaker Verification") as demo:
             )
 
             experiment.change(
-                update_checkpoints, inputs=[experiment], outputs=[checkpoint]
+                update_checkpoints,
+                inputs=experiment,
+                outputs=checkpoint,
             )
 
             checkpoint.change(
                 load_model,
-                inputs=[experiment, checkpoint],
-                outputs=[model_status, threshold],
+                inputs=[
+                    experiment,
+                    checkpoint,
+                ],
+                outputs=[
+                    model_status,
+                    threshold,
+                ],
             )
 
             with gr.Row():
-                audio1 = gr.Audio(type="filepath", label="Audio 1")
+                audio1 = gr.Audio(
+                    type="filepath",
+                    label="Audio 1",
+                )
 
-                audio2 = gr.Audio(type="filepath", label="Audio 2")
+                audio2 = gr.Audio(
+                    type="filepath",
+                    label="Audio 2",
+                )
 
-            compare_btn = gr.Button("Compare", variant="primary")
+            compare_btn = gr.Button(
+                "Compare",
+                variant="primary",
+            )
 
             prediction = gr.Textbox(label="Prediction")
-
             confidence = gr.Textbox(label="Confidence")
-
             cosine = gr.Textbox(label="Cosine similarity")
 
             compare_btn.click(
                 compare,
-                inputs=[audio1, audio2, threshold],
-                outputs=[prediction, confidence, cosine],
+                inputs=[
+                    audio1,
+                    audio2,
+                    threshold,
+                ],
+                outputs=[
+                    prediction,
+                    confidence,
+                    cosine,
+                ],
             )
 
         # ====================================================
@@ -198,29 +304,45 @@ with gr.Blocks(title="Speaker Verification") as demo:
         # ====================================================
         with gr.Tab("Report"):
             report_exp = gr.Dropdown(
-                choices=experiments,
-                label="Report experiment",
-                value=None if experiments else None,
+                choices=["Default model"] + models,
+                value="Default model",
+                label="Experiment",
             )
 
             report_dir = gr.Textbox(
                 label="Report directory name",
-                placeholder=("Leave empty for automatic name: report_YYYYMMDD_HHMMSS"),
-                value="",
+                placeholder="Leave empty for report_YYYYMMDD_HHMMSS",
             )
 
             report_dataset = gr.Textbox(
-                label="Test dataset path", value="speaker_dataset/test"
+                value="speaker_dataset/test",
+                label="Dataset path",
             )
 
-            report_btn = gr.Button("Generate report", variant="primary")
+            report_balance = gr.Checkbox(
+                label="Balance positive/negative pairs",
+                value=True,
+            )
 
-            report_log = gr.Textbox(label="Console output", lines=30)
+            report_btn = gr.Button(
+                "Generate report",
+                variant="primary",
+            )
+
+            report_log = gr.Textbox(
+                label="Console output",
+                lines=30,
+            )
 
             report_btn.click(
                 run_report,
-                inputs=[report_exp, report_dir, report_dataset],
-                outputs=[report_log],
+                inputs=[
+                    report_exp,
+                    report_dir,
+                    report_dataset,
+                    report_balance,
+                ],
+                outputs=report_log,
             )
 
 demo.launch()

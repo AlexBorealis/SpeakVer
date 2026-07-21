@@ -1,5 +1,6 @@
 import argparse
 import os
+from datetime import datetime
 
 import torch
 
@@ -12,7 +13,6 @@ from src.model.aamsoftmax import AAMSoftmax
 from src.model.embedding_extractor import EmbeddingExtractor
 from src.train.speaker_dataset import SpeakerDataset
 from src.train.trainer import Trainer
-from src.utils.utils import load_checkpoint
 
 # ============================================================
 # Arguments
@@ -27,85 +27,116 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--experiment",
+    "--model_path",
     type=str,
     default=None,
-    required=False,
-    help="Training experiment name",
+    help="Path to checkpoint",
 )
 
 parser.add_argument(
-    "--output_dir", type=str, default=None, help="Directory for saving report"
+    "--output_dir",
+    type=str,
+    default=None,
+    help="Directory for saving report",
+)
+
+parser.add_argument(
+    "--no-balance",
+    action="store_true",
+)
+
+parser.add_argument(
+    "--threshold",
+    type=float,
+    default=None,
+    help="Fixed cosine similarity threshold",
+)
+
+parser.add_argument(
+    "--device",
+    type=str,
+    default="cpu",
 )
 
 args = parser.parse_args()
 
 # ============================================================
-# Output directory
+# Report directory
 # ============================================================
-if args.output_dir is None or args.output_dir.strip() == "":
-    from datetime import datetime
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+DEFAULT_DIR = os.path.join(
+    "reports",
+    f"report_{timestamp}",
+)
 
-    REPORT_DIR = os.path.join("reports", f"report_{timestamp}")
-else:
-    REPORT_DIR = args.output_dir
+REPORT_DIR = DEFAULT_DIR
+
+if args.output_dir is not None:
+    REPORT_DIR = f"{DEFAULT_DIR}_{args.output_dir}"
 
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 print("=" * 60)
-print("Experiment:", args.experiment)
-print("Report directory:", REPORT_DIR)
+print("Model :", args.model_path if args.model_path else "SpeechBrain pretrained")
+print("Dataset:", args.dataset_path)
+print("Device :", args.device)
+print("Report :", REPORT_DIR)
 print("=" * 60)
-
-# ============================================================
-# Paths
-# ============================================================
-checkpoint = os.path.join(
-    "runs", "speaker_train", args.experiment, "weights", "best.pt"
-) if args.experiment is not None else print("Using default model")
-print("Checkpoint:", checkpoint)
 
 # ============================================================
 # Dataset
 # ============================================================
-test_dataset = SpeakerDataset(args.dataset_path, return_audio=False)
+test_dataset = SpeakerDataset(
+    args.dataset_path,
+    return_audio=False,
+)
 
 # ============================================================
 # Preprocessing
 # ============================================================
-train_preprocessor = AudioPreprocessor(device="cpu", augment=True, target_sr=8000)
-val_preprocessor = AudioPreprocessor(device="cpu")
+train_preprocessor = AudioPreprocessor(
+    augment=True,
+    target_sr=8000,
+)
+
+val_preprocessor = AudioPreprocessor(
+    target_sr=8000,
+)
 
 # ============================================================
 # Utils
 # ============================================================
-builder = PairBuilder()
+builder = PairBuilder(
+    balance=not args.no_balance,
+)
 metrics = Metrics()
 plotter = Plotter()
 
 # ============================================================
 # Model
 # ============================================================
-extractor = EmbeddingExtractor()
-# Default model
-if args.experiment is None or args.experiment.strip() == "":
-    print("Using default model")
-# Load trained checkpoint
+extractor = EmbeddingExtractor(
+    device=args.device,
+)
+
+if args.model_path is not None:
+    if not os.path.exists(args.model_path):
+        raise FileNotFoundError(args.model_path)
+
+    extractor.load_encoder_weights(args.model_path)
+
 else:
-    checkpoint = os.path.join(
-        "runs", "speaker_train", args.experiment, "weights", "best.pt"
-    )
-    print("Loading checkpoint:", checkpoint)
-    if not os.path.exists(checkpoint):
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
-    extractor = load_checkpoint(checkpoint, extractor)
+    print("Using pretrained SpeechBrain encoder")
 
 # ============================================================
 # Criterion
 # ============================================================
-criterion = AAMSoftmax(embedding_dim=192, num_classes=test_dataset.get_num_speakers())
+criterion = AAMSoftmax(
+    embedding_dim=192,
+    num_classes=test_dataset.get_num_speakers(),
+)
+
 optimizer = torch.optim.AdamW(
     list(extractor.parameters()) + list(criterion.parameters()),
     lr=1e-4,
@@ -113,29 +144,67 @@ optimizer = torch.optim.AdamW(
 )
 
 # ============================================================
-# Report
+# Trainer
 # ============================================================
-report = BaselineReport(REPORT_DIR)
 trainer = Trainer(
+    builder=builder,
     train_preprocessor=train_preprocessor,
     val_preprocessor=val_preprocessor,
     metrics=metrics,
-    builder=builder,
     encoder=extractor,
     criterion=criterion,
     optimizer=optimizer,
+    threshold=args.threshold,
 )
+
+# ============================================================
+# Report
+# ============================================================
+report = BaselineReport(REPORT_DIR)
 
 # ============================================================
 # Validation
 # ============================================================
 result = trainer.validate(test_dataset)
 
-print("\nOptimal threshold:")
-print(result["metrics"]["threshold"])
+metrics = result["metrics"]
 
-print("\nMetrics:")
-print(result["metrics"])
+print()
+print("=" * 60)
+print("Speaker Verification Metrics")
+print("=" * 60)
+
+print(f"{'Accuracy':20}: {metrics['accuracy']:.4f}")
+print(f"{'Precision':20}: {metrics['precision']:.4f}")
+print(f"{'Recall':20}: {metrics['recall']:.4f}")
+print(f"{'F1-score':20}: {metrics['f1']:.4f}")
+print(f"{'ROC AUC':20}: {metrics['roc_auc']:.4f}")
+print(f"{'EER':20}: {metrics['eer']:.4f}")
+print(f"{'Threshold':20}: {metrics['threshold']:.4f}")
+
+print()
+print("Confusion Matrix")
+print("-" * 60)
+
+cm = metrics["confusion_matrix"]
+
+print(f"{'':18}Predicted")
+print(f"{'':18}Different      Same")
+print(f"{'Actual Different':18}{cm[0][0]:10d}{cm[0][1]:10d}")
+print(f"{'Actual Same':18}{cm[1][0]:10d}{cm[1][1]:10d}")
+
+print()
+print("Normalized Confusion Matrix")
+print("-" * 60)
+
+cm = metrics["confusion_matrix_normalized"]
+
+print(f"{'':18}Predicted")
+print(f"{'':18}Different      Same")
+print(f"{'Actual Different':18}{cm[0][0]:10.4f}{cm[0][1]:10.4f}")
+print(f"{'Actual Same':18}{cm[1][0]:10.4f}{cm[1][1]:10.4f}")
+
+print("=" * 60)
 
 # ============================================================
 # Save report
@@ -148,5 +217,6 @@ report.save(
     plotter=plotter,
 )
 
-print("\nBaseline report successfully saved")
+print()
+print("Baseline report successfully saved")
 print("Directory:", REPORT_DIR)

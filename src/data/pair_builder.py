@@ -1,6 +1,5 @@
-from collections import defaultdict
-from itertools import combinations
 import random
+from itertools import combinations
 
 
 class PairBuilder:
@@ -11,7 +10,6 @@ class PairBuilder:
         max_positive_pairs=None,
         max_negative_pairs=None,
     ):
-
         self.random_seed = random_seed
         self.balance = balance
 
@@ -21,67 +19,56 @@ class PairBuilder:
         random.seed(random_seed)
 
     def build(self, dataset):
-        speakers = defaultdict(list)
-
-        for sample in dataset:
-            speakers[sample["speaker_id"]].append(sample)
-
-        ################################################
-        # Positive pairs
-        ################################################
-
+        # Все аудиозаписи
+        samples = list(dataset)
+        
+        # Все уникальные пары
         positive_pairs = []
-
-        for samples in speakers.values():
-            for s1, s2 in combinations(samples, 2):
-                positive_pairs.append({"sample1": s1, "sample2": s2, "label": 1})
-
-        ################################################
-        # Negative pairs
-        ################################################
-
         negative_pairs = []
-        speaker_ids = list(speakers.keys())
 
-        for spk1, spk2 in combinations(speaker_ids, 2):
-            s1 = random.choice(speakers[spk1])
-            s2 = random.choice(speakers[spk2])
+        for sample1, sample2 in combinations(samples, 2):
+            pair = {
+                "sample1": sample1,
+                "sample2": sample2,
+                "label": int(sample1["speaker_id"] == sample2["speaker_id"]),
+            }
 
-            negative_pairs.append({"sample1": s1, "sample2": s2, "label": 0})
-
-        ################################################
+            if pair["label"] == 1:
+                positive_pairs.append(pair)
+            else:
+                negative_pairs.append(pair)
+                
+        # Перемешивание
+        random.shuffle(positive_pairs)
+        random.shuffle(negative_pairs)
+        
         # Ограничение количества
-        ################################################
+        if self.max_positive_pairs is not None:
+            positive_pairs = positive_pairs[
+                : min(self.max_positive_pairs, len(positive_pairs))
+            ]
 
-        if self.max_positive_pairs:
-            positive_pairs = random.sample(
-                positive_pairs, min(self.max_positive_pairs, len(positive_pairs))
-            )
-
-        if self.max_negative_pairs:
-            negative_pairs = random.sample(
-                negative_pairs, min(self.max_negative_pairs, len(negative_pairs))
-            )
-
-        ################################################
-        # Баланс
-        ################################################
-
+        if self.max_negative_pairs is not None:
+            negative_pairs = negative_pairs[
+                : min(self.max_negative_pairs, len(negative_pairs))
+            ]
+            
+        # Балансировка
         if self.balance:
             n = min(len(positive_pairs), len(negative_pairs))
-
-            positive_pairs = random.sample(positive_pairs, n)
-
-            negative_pairs = random.sample(negative_pairs, n)
-
+            positive_pairs = positive_pairs[:n]
+            negative_pairs = negative_pairs[:n]
+            
+        # Итоговый датасет
         pairs = positive_pairs + negative_pairs
-
         random.shuffle(pairs)
 
-        print(f"Positive pairs: {len(positive_pairs)}")
-
-        print(f"Negative pairs: {len(negative_pairs)}")
-
-        print(f"Total pairs: {len(pairs)}")
+        print("=" * 60)
+        print("Pair Dataset")
+        print("=" * 60)
+        print(f"Positive pairs : {len(positive_pairs)}")
+        print(f"Negative pairs : {len(negative_pairs)}")
+        print(f"Total pairs    : {len(pairs)}")
+        print("=" * 60)
 
         return pairs

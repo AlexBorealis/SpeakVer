@@ -1,14 +1,13 @@
 import json
 import os
-from pathlib import Path
 import random
+from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 import torchaudio
 import torchaudio.functional as AF
 import torchaudio.transforms as AT
-import torch.nn.functional as F
-
 from tqdm import tqdm
 
 
@@ -16,7 +15,6 @@ class AudioPreprocessor:
     def __init__(
         self,
         target_sr=8000,
-        device="cpu",
         mono=True,
         resample=True,
         remove_dc=True,
@@ -30,7 +28,6 @@ class AudioPreprocessor:
         vad_search_time=0.03,
     ):
         self.target_sr = target_sr
-        self.device = torch.device(device)
 
         self.mono = mono
         self.resample = resample
@@ -53,9 +50,7 @@ class AudioPreprocessor:
 
     def _get_resampler(self, sample_rate):
         if sample_rate not in self.resamplers:
-            self.resamplers[sample_rate] = AT.Resample(sample_rate, self.target_sr).to(
-                self.device
-            )
+            self.resamplers[sample_rate] = AT.Resample(sample_rate, self.target_sr)
 
         return self.resamplers[sample_rate]
 
@@ -91,22 +86,19 @@ class AudioPreprocessor:
     def load_audio(self, audio_input):
         if hasattr(audio_input, "get_all_samples"):
             audio = audio_input.get_all_samples()
-            waveform = audio.data.to(self.device)
+            waveform = audio.data
 
             sample_rate = audio.sample_rate
 
         elif isinstance(audio_input, dict):
             waveform = torch.tensor(
-                audio_input["array"], dtype=torch.float32, device=self.device
+                audio_input["array"], dtype=torch.float32
             ).unsqueeze(0)
 
             sample_rate = audio_input["sampling_rate"]
 
-        elif isinstance(audio_input, str):
+        elif isinstance(audio_input, (str, None)):
             waveform, sample_rate = torchaudio.load(audio_input)
-
-            waveform = waveform.to(self.device)
-
         else:
             raise TypeError(f"Unsupported audio type: {type(audio_input)}")
 
@@ -149,7 +141,6 @@ class AudioPreprocessor:
         return waveform
 
     def save_audio(self, audio_input, output_dir="debug_audio", filename="sample.wav"):
-
         os.makedirs(output_dir, exist_ok=True)
 
         waveform = self.load_audio(audio_input)

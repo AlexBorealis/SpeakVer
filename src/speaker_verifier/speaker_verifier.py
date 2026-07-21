@@ -1,37 +1,33 @@
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 
 from src.data.audio_preprocessor import AudioPreprocessor
 from src.model.embedding_extractor import EmbeddingExtractor
-from src.utils.utils import load_checkpoint
 
 
 class SpeakerVerifier:
     def __init__(
         self,
-        checkpoint: Optional[str] = None,
-        threshold: float = 0.65,
+        checkpoint: str | None = None,
+        threshold: float = 0.5,
         device: str = "cpu",
     ):
         self.device = device
         self.threshold = threshold
 
-        self.preprocessor = AudioPreprocessor(device=device)
+        self.preprocessor = AudioPreprocessor()
         self.model = EmbeddingExtractor()
 
         if checkpoint is not None:
             print(f"Loading checkpoint: {checkpoint}")
-            self.model = load_checkpoint(checkpoint, self.model)
+            self.model.load_encoder_weights(
+                checkpoint,
+            )
         else:
             print("Using default EmbeddingExtractor.")
 
         self.model.to(device)
         self.model.eval()
-
-    def set_threshold(self, threshold: float):
-        self.threshold = threshold
 
     @torch.no_grad()
     def get_embedding(self, audio_path: str):

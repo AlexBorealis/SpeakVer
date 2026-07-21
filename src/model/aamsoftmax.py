@@ -21,17 +21,16 @@ class AAMSoftmax(nn.Module):
 
     def forward(self, embeddings, labels):
         cosine = F.linear(F.normalize(embeddings), F.normalize(self.weight))
+        cosine = cosine.clamp(-1 + 1e-7, 1 - 1e-7)
 
-        sine = torch.sqrt((1.0 - cosine.pow(2)).clamp(0, 1))
+        sine = torch.sqrt(torch.clamp(1.0 - cosine.pow(2), min=1e-9))
 
         phi = cosine * self.cos_m - sine * self.sin_m
 
         one_hot = torch.zeros_like(cosine)
-
         one_hot.scatter_(1, labels.view(-1, 1), 1)
 
         logits = one_hot * phi + (1 - one_hot) * cosine
-
         logits *= self.scale
 
         loss = F.cross_entropy(logits, labels)

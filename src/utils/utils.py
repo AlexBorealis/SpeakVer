@@ -1,9 +1,8 @@
-from pathlib import Path
-import shutil
-
-import torch
-from torch.utils.data import Subset
 import random
+import shutil
+from pathlib import Path
+
+from torch.utils.data import Subset
 
 from src.train.speaker_dataset import SpeakerDataset
 
@@ -15,17 +14,6 @@ def has_speaker_dirs(path):
         return False
 
     return any(item.is_dir() for item in path.iterdir())
-
-
-def load_checkpoint(path, extractor, criterion=None):
-    ckpt = torch.load(path, map_location="cpu")
-
-    extractor.load_state_dict(ckpt["encoder"])
-
-    if criterion:
-        criterion.load_state_dict(ckpt["criterion"])
-
-    return extractor
 
 
 def split_dataset(
@@ -47,6 +35,10 @@ def split_dataset(
         val_dir = output_dir / "val"
         test_dir = output_dir / "test"
 
+        train_dir.mkdir(parents=True, exist_ok=True)
+        val_dir.mkdir(parents=True, exist_ok=True)
+        test_dir.mkdir(parents=True, exist_ok=True)
+
         split_exists = (
             has_speaker_dirs(train_dir)
             and has_speaker_dirs(val_dir)
@@ -64,8 +56,10 @@ def split_dataset(
 
     random.seed(seed)
 
-    speakers = list(set(item[split_key] for item in dataset))
+    # Используем внутренний список samples, а не __getitem__()
+    samples = dataset.samples if hasattr(dataset, "samples") else dataset
 
+    speakers = list({item[split_key] for item in samples})
     random.shuffle(speakers)
 
     n = len(speakers)
@@ -82,7 +76,7 @@ def split_dataset(
     if not persistent:
         indices = {"train": [], "val": [], "test": []}
 
-        for i, item in enumerate(dataset):
+        for i, item in enumerate(samples):
             for name, spks in splits.items():
                 if item[split_key] in spks:
                     indices[name].append(i)
@@ -105,7 +99,7 @@ def split_dataset(
             src = source_root / speaker
             dst = split_path / speaker
 
-            if src.exists():
+            if src.exists() and not dst.exists():
                 shutil.move(src, dst)
 
     return (

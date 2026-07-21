@@ -1,26 +1,62 @@
+import argparse
 import os
 
 from dotenv import load_dotenv
 from huggingface_hub import login
+from tqdm import tqdm
 
 from datasets import load_dataset
 from src.data.audio_preprocessor import AudioPreprocessor
 
-load_dotenv(
-    dotenv_path="/home/borealis/Documents/work/projects/work_tests/SpeakVer/config/envs/.env"
+# =======================================================================
+# Arguments
+# =======================================================================
+parser = argparse.ArgumentParser(description="Download VibraVox Dataset")
+
+parser.add_argument(
+    "--config_path",
+    type=str,
+    default="config/envs/.env",
+    help="Path to dataset",
 )
+
+parser.add_argument(
+    "--dataset_path",
+    type=str,
+    default="speaker_dataset",
+    help="Path to dataset",
+)
+
+parser.add_argument(
+    "--n",
+    type=str,
+    default=100,
+    help="Count files",
+)
+
+args = parser.parse_args()
+
+# =======================================================================
+# Environments
+# =======================================================================
+load_dotenv(dotenv_path=args.config_path)
 HF_TOKEN = os.getenv("HF_TOKEN")
 login(token=HF_TOKEN)
 
-n = 100
-
+# =======================================================================
+# Downloading Data
+# =======================================================================
 dataset = load_dataset(
     "Cnam-LMSSC/vibravox", "speech_clean", split="train", streaming=True
 )
-mini_dataset = dataset.take(n)
 
-main_list = list(mini_dataset)
+main_list = []
+for sample in tqdm(dataset.take(args.n), total=args.n):
+    main_list.append(sample)
 
 preprocessor = AudioPreprocessor()
 
-preprocessor.save_samples(main_list, "debug_audio")
+# =======================================================================
+# Saving Data
+# =======================================================================
+preprocessor.save_samples(main_list, output_dir=args.dataset_path)
