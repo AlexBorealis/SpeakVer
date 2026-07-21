@@ -24,4 +24,6 @@ HyperPyYAML==1.2.3
 datasets
 onnx
 onnxruntime-gpu
+
+# Разное
 python-dotenv

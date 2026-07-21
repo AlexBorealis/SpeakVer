@@ -6,7 +6,7 @@ CONTAINER_NAME := speakver_container
 
 PORT ?= 7860
 
-ENV_FILE ?= ./config/envs/.env
+ENV_FILE ?= config/envs/.env
 
 # ============================================================
 # Host directories

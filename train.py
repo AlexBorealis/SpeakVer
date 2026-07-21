@@ -96,6 +96,7 @@ builder = PairBuilder(
 metrics = Metrics()
 train_preprocessor = AudioPreprocessor(
     augment=True,
+    random_crop=True,
     target_sr=args.target_sr,
 )
 val_preprocessor = AudioPreprocessor(

@@ -1,25 +1,32 @@
 import os
 import subprocess
+from pathlib import Path
 
 import gradio as gr
+from dotenv import load_dotenv
 
 from src.speaker_verifier.speaker_verifier import SpeakerVerifier
 
 # ============================================================
 # Paths
 # ============================================================
-RUNS_DIR = "runs"
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / "config" / "envs" / ".env"
+
+load_dotenv(dotenv_path=ENV_PATH)
 
 
 # ============================================================
 # Models utils
 # ============================================================
 def get_models():
-    if not os.path.exists(RUNS_DIR):
+    if not os.path.exists(os.getenv("RUNS_DIR")):
         return []
 
     return sorted(
-        d for d in os.listdir(RUNS_DIR) if os.path.isdir(os.path.join(RUNS_DIR, d))
+        d
+        for d in os.listdir(os.getenv("RUNS_DIR"))
+        if os.path.isdir(os.path.join(os.getenv("RUNS_DIR"), d))
     )
 
 
@@ -28,7 +35,7 @@ def get_checkpoints(exp_name):
         return []
 
     weights_dir = os.path.join(
-        RUNS_DIR,
+        os.getenv("RUNS_DIR"),
         exp_name,
         "weights",
     )
@@ -49,14 +56,14 @@ def resolve_checkpoint(exp, checkpoint=None):
 
     if checkpoint and checkpoint != "Default model":
         path = os.path.join(
-            RUNS_DIR,
+            os.getenv("RUNS_DIR"),
             exp,
             "weights",
             checkpoint,
         )
     else:
         path = os.path.join(
-            RUNS_DIR,
+            os.getenv("RUNS_DIR"),
             exp,
             "weights",
             "best.pt",
