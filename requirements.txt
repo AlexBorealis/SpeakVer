@@ -1,12 +1,11 @@
 # Веб-интерфейс
 gradio==6.20.0
-fastapi
-uvicorn
 
 # Нейросети, аудио и глубокое обучение
 torch
 torchaudio
 torchvision
+torchcodec
 speechbrain==1.1.0
 librosa==0.11.0
 soundfile==0.14.0
@@ -22,9 +21,7 @@ seaborn
 HyperPyYAML==1.2.3
 
 # Дополнительные инструменты (если используются в коде)
-mlflow
-transformers
 datasets
-ultralytics
 onnx
 onnxruntime-gpu
+python-dotenv

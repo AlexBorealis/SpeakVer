@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     gcc \
     git \
+    nano \
+    && ln -s /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -23,6 +25,7 @@ RUN python3 -m pip install \
 
 COPY src/ ./src/
 COPY pretrained_models/ ./pretrained_models/
+COPY report.py .
 COPY app.py .
 
 # Каталоги, которые могут быть смонтированы снаружи
@@ -40,4 +43,4 @@ EXPOSE 7860
 ENV GRADIO_SERVER_NAME=0.0.0.0
 ENV GRADIO_SERVER_PORT=7860
 
-CMD ["python3", "app.py"]
+CMD ["python", "app.py"]

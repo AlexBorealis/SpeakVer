@@ -68,6 +68,24 @@ def resolve_checkpoint(exp, checkpoint=None):
     return None
 
 
+def get_users():
+    users = []
+
+    for i in range(1, 4):
+        login = os.getenv(f"USER{i}_LOGIN")
+        password = os.getenv(f"USER{i}_PASSWORD")
+
+        if login and password:
+            users.append(
+                (
+                    login,
+                    password,
+                )
+            )
+
+    return users
+
+
 # ============================================================
 # Global verifier
 # ============================================================
@@ -315,7 +333,7 @@ with gr.Blocks(title="Speaker Verification") as demo:
             )
 
             report_dataset = gr.Textbox(
-                value="speaker_dataset/test",
+                value="datasets/test",
                 label="Dataset path",
             )
 
@@ -346,4 +364,14 @@ with gr.Blocks(title="Speaker Verification") as demo:
             )
 
 if __name__ == "__main__":
-    demo.launch()
+    users = get_users()
+    if not users:
+        raise RuntimeError("No users configured. Check .env file")
+
+    demo.queue(max_size=3)
+
+    demo.launch(
+        auth=users,
+        server_name="0.0.0.0",
+        server_port=7860,
+    )

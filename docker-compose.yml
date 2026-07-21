@@ -1,22 +1,21 @@
-version: '3.8'
-
 services:
   speakver-app:
     build: .
+
     container_name: speakver_container
+
+    env_file:
+      - ./config/envs/docker.env
+
     ports:
-      - "7860:7860" # Порт для доступа к Gradio (Хост:Контейнер)
+      - "127.0.0.1:7860:7860"
+
     volumes:
-      # Тяжелые папки и результаты работы монтируются локально
       - ./datasets:/app/datasets
+      - ./runs:/app/runs
       - ./reports:/app/reports
-      - ./experiments:/app/experiments
       - ./debug_audio:/app/debug_audio
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all # Предоставляет контейнеру доступ ко всем GPU хоста
-              capabilities: [gpu]
+
+    gpus: all
+
     restart: unless-stopped

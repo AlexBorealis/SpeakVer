@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description="Generate speaker verification repo
 parser.add_argument(
     "--dataset_path",
     type=str,
-    default="speaker_dataset/test",
+    default="datasets/test",
     help="Path to test dataset",
 )
 
