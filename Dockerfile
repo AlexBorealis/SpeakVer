@@ -28,11 +28,12 @@ COPY pretrained_models/ ./pretrained_models/
 COPY report.py .
 COPY app.py .
 
-# Каталоги, которые могут быть смонтированы снаружи
 RUN mkdir -p \
     /app/datasets \
     /app/reports \
-    /app/runs
+    /app/runs \
+    /app/debug_audio \
+    /app/archives
 
 VOLUME ["/app/datasets"]
 VOLUME ["/app/reports"]
