@@ -15,6 +15,7 @@ DATASET_DIR ?= $(PWD)/datasets
 RUNS_DIR ?= $(PWD)/runs
 REPORTS_DIR ?= $(PWD)/reports
 DEBUG_AUDIO_DIR ?= $(PWD)/debug_audio
+ARCHIVES_DIR ?= $(PWD)/archives
 
 # ============================================================
 # Container directories
@@ -23,6 +24,7 @@ CONTAINER_DATASET_DIR := /app/datasets
 CONTAINER_RUNS_DIR := /app/runs
 CONTAINER_REPORTS_DIR := /app/reports
 CONTAINER_DEBUG_AUDIO_DIR := /app/debug_audio
+CONTAINER_ARCHIVES_DIR := /app/archives
 
 # ============================================================
 # PHONY
@@ -60,6 +62,7 @@ run: ## Run container (docker)
 		-v $(RUNS_DIR):$(CONTAINER_RUNS_DIR) \
 		-v $(REPORTS_DIR):$(CONTAINER_REPORTS_DIR) \
 		-v $(DEBUG_AUDIO_DIR):$(CONTAINER_DEBUG_AUDIO_DIR) \
+		-v $(ARCHIVES_DIR):$(CONTAINER_ARCHIVES_DIR) \
 		--restart unless-stopped \
 		$(IMAGE_NAME)
 

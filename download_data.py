@@ -1,16 +1,15 @@
 import argparse
-import os
 
-from dotenv import load_dotenv
 from huggingface_hub import login
 from tqdm import tqdm
 
 from datasets import load_dataset
+from src.config import HF_TOKEN
 from src.data.audio_preprocessor import AudioPreprocessor
 
-# =======================================================================
+# ============================================================
 # Arguments
-# =======================================================================
+# ============================================================
 parser = argparse.ArgumentParser(description="Download VibraVox Dataset")
 
 parser.add_argument(
@@ -36,16 +35,14 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-# =======================================================================
+# ============================================================
 # Environments
-# =======================================================================
-load_dotenv(dotenv_path=args.config_path)
-HF_TOKEN = os.getenv("HF_TOKEN")
+# ============================================================
 login(token=HF_TOKEN)
 
-# =======================================================================
+# ============================================================
 # Downloading Data
-# =======================================================================
+# ============================================================
 dataset = load_dataset(
     "Cnam-LMSSC/vibravox", "speech_clean", split="train", streaming=True
 )
@@ -56,7 +53,7 @@ for sample in tqdm(dataset.take(args.n), total=args.n):
 
 preprocessor = AudioPreprocessor()
 
-# =======================================================================
+# ============================================================
 # Saving Data
-# =======================================================================
+# ============================================================
 preprocessor.save_samples(main_list, output_dir=args.dataset_path)

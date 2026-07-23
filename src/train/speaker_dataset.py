@@ -1,3 +1,4 @@
+import json
 from collections import Counter
 from pathlib import Path
 
@@ -79,11 +80,26 @@ class SpeakerDataset(Dataset):
                 if file.suffix.lower() not in self.AUDIO_EXTENSIONS:
                     continue
 
+                duration = None
+
+                metadata_file = file.with_suffix(".json")
+
+                if metadata_file.exists():
+                    try:
+                        with open(metadata_file, encoding="utf-8") as f:
+                            metadata = json.load(f)
+
+                        duration = metadata.get("duration")
+
+                    except Exception:
+                        duration = None
+
                 self.samples.append(
                     {
                         "speaker_id": speaker_name,
                         "speaker_index": speaker_index,
                         "path": str(file),
+                        "duration": duration,
                     }
                 )
 
@@ -91,44 +107,34 @@ class SpeakerDataset(Dataset):
 
     def statistics(self):
         """
-        Вывод статистики по датасету.
+        Statistics of Dataset
         """
         counter = Counter()
+
+        durations = []
 
         for sample in self.samples:
             counter[sample["speaker_id"]] += 1
 
+            if sample["duration"] is not None:
+                durations.append(sample["duration"])
+
         counts = np.array(list(counter.values()))
-
-        print("=" * 60)
-        print("Speaker Dataset Statistics")
-        print("=" * 60)
-
-        print(f"Speakers              : {len(counter)}")
-        print(f"Audio files           : {len(self.samples)}")
-        print(f"Min recordings        : {counts.min()}")
-        print(f"Max recordings        : {counts.max()}")
-        print(f"Mean recordings       : {counts.mean():.2f}")
-        print(f"Median recordings     : {np.median(counts):.2f}")
-        print(f"Std recordings        : {counts.std():.2f}")
-
-        print("=" * 60)
-        print("Top-10 speakers")
-        print("=" * 60)
-
-        for speaker, n in counter.most_common(10):
-            print(f"{speaker:15s} {n}")
-
-        print("=" * 60)
+        durations = np.array(durations)
 
         return {
             "num_speakers": len(counter),
             "num_samples": len(self.samples),
-            "min": int(counts.min()),
-            "max": int(counts.max()),
-            "mean": float(counts.mean()),
-            "median": float(np.median(counts)),
-            "std": float(counts.std()),
+            "min_qty": int(counts.min()),
+            "max_qty": int(counts.max()),
+            "mean_qty": float(counts.mean()),
+            "median_qty": float(np.median(counts)),
+            "std_qty": float(counts.std()),
+            "min_duration": float(durations.min()),
+            "max_duration": float(durations.max()),
+            "mean_duration": float(durations.mean()),
+            "median_duration": float(np.nanmedian(durations)),
+            "std_duration": float(durations.std()),
             "distribution": counter,
         }
 

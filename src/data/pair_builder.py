@@ -64,11 +64,13 @@ class PairBuilder:
         random.shuffle(pairs)
 
         print("=" * 60)
+        print()
+                
         print("Pair Dataset")
         print("=" * 60)
-        print(f"Positive pairs : {len(positive_pairs)}")
-        print(f"Negative pairs : {len(negative_pairs)}")
-        print(f"Total pairs    : {len(pairs)}")
-        print("=" * 60)
+        print(f"Positive pairs                        : {len(positive_pairs)}")
+        print(f"Negative pairs                        : {len(negative_pairs)}")
+        print(f"Total pairs                           : {len(pairs)}")
+        print()
 
         return pairs

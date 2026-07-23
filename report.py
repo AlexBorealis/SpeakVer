@@ -1,9 +1,10 @@
 import argparse
-import os
 from datetime import datetime
+from pathlib import Path
 
 import torch
 
+from src.config import REPORTS_DIR
 from src.data.audio_preprocessor import AudioPreprocessor
 from src.data.baseline_report import BaselineReport
 from src.data.metrics import Metrics
@@ -14,208 +15,218 @@ from src.model.embedding_extractor import EmbeddingExtractor
 from src.train.speaker_dataset import SpeakerDataset
 from src.train.trainer import Trainer
 
+
 # ============================================================
 # Arguments
 # ============================================================
-parser = argparse.ArgumentParser(description="Generate speaker verification report")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate speaker verification report")
 
-parser.add_argument(
-    "--dataset_path",
-    type=str,
-    default="datasets/test",
-    help="Path to test dataset",
-)
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        default="datasets/test",
+        help="Path to test dataset",
+    )
 
-parser.add_argument(
-    "--model_path",
-    type=str,
-    default=None,
-    help="Path to checkpoint",
-)
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        default=None,
+        help="Path to checkpoint",
+    )
 
-parser.add_argument(
-    "--output_dir",
-    type=str,
-    default=None,
-    help="Directory for saving report",
-)
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=None,
+        help="Directory for saving report",
+    )
 
-parser.add_argument(
-    "--no-balance",
-    action="store_true",
-)
+    parser.add_argument(
+        "--no-balance",
+        action="store_true",
+        help="Disable positive/negative pair balancing",
+    )
 
-parser.add_argument(
-    "--threshold",
-    type=float,
-    default=None,
-    help="Fixed cosine similarity threshold",
-)
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Fixed cosine similarity threshold",
+    )
 
-parser.add_argument(
-    "--device",
-    type=str,
-    default="cpu",
-)
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cpu",
+    )
 
-args = parser.parse_args()
+    parser.add_argument(
+        "--disable",
+        action="store_true",
+        help="Disable progress bar",
+    )
+
+    return parser.parse_args()
+
 
 # ============================================================
 # Report directory
 # ============================================================
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+def prepare_output_dir(output_dir: str | None) -> Path:
+    if output_dir:
+        report_dir = Path(output_dir)
+    else:
+        report_dir = Path(f"report_{datetime.now():%Y%m%d_%H%M%S}")
 
-DEFAULT_DIR = os.path.join(
-    "reports",
-    f"report_{timestamp}",
-)
+    report_dir = (REPORTS_DIR / report_dir).resolve()
 
-REPORT_DIR = DEFAULT_DIR
+    report_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
 
-if args.output_dir is not None:
-    REPORT_DIR = f"{DEFAULT_DIR}_{args.output_dir}"
+    return report_dir
 
-os.makedirs(REPORT_DIR, exist_ok=True)
-
-print("=" * 60)
-print("Model :", args.model_path if args.model_path else "SpeechBrain pretrained")
-print("Dataset:", args.dataset_path)
-print("Device :", args.device)
-print("Report :", REPORT_DIR)
-print("=" * 60)
 
 # ============================================================
-# Dataset
+# Main
 # ============================================================
-test_dataset = SpeakerDataset(
-    args.dataset_path,
-    return_audio=False,
-)
+def main():
+    args = parse_args()
 
-# ============================================================
-# Preprocessing
-# ============================================================
-train_preprocessor = AudioPreprocessor(
-    augment=True,
-    target_sr=8000,
-)
+    report_dir = prepare_output_dir(args.output_dir)
 
-val_preprocessor = AudioPreprocessor(
-    target_sr=8000,
-)
+    print("=" * 60)
+    print(
+        "Model :",
+        args.model_path if args.model_path else "SpeechBrain pretrained",
+    )
+    print("Dataset:", args.dataset_path)
+    print("Device :", args.device)
+    print("Report :", report_dir)
+    print("=" * 60)
+    print()
 
-# ============================================================
-# Utils
-# ============================================================
-builder = PairBuilder(
-    balance=not args.no_balance,
-)
-metrics = Metrics()
-plotter = Plotter()
+    # Dataset
+    test_dataset = SpeakerDataset(
+        args.dataset_path,
+        return_audio=False,
+    )
+    dataset_stats = test_dataset.statistics()
 
-# ============================================================
-# Model
-# ============================================================
-extractor = EmbeddingExtractor(
-    device=args.device,
-)
+    # Preprocessing
+    train_preprocessor = AudioPreprocessor(augment=True)
+    val_preprocessor = AudioPreprocessor()
 
-if args.model_path is not None:
-    if not os.path.exists(args.model_path):
-        raise FileNotFoundError(args.model_path)
+    # Utils
+    builder = PairBuilder(balance=not args.no_balance)
+    metrics = Metrics()
+    plotter = Plotter()
 
-    extractor.load_encoder_weights(args.model_path)
+    # Model
+    extractor = EmbeddingExtractor(device=args.device)
 
-else:
-    print("Using pretrained SpeechBrain encoder")
+    if args.model_path:
+        checkpoint = Path(args.model_path)
 
-# ============================================================
-# Criterion
-# ============================================================
-criterion = AAMSoftmax(
-    num_classes=test_dataset.get_num_speakers(),
-)
+        if not checkpoint.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
 
-optimizer = torch.optim.AdamW(
-    list(extractor.parameters()) + list(criterion.parameters()),
-    lr=1e-4,
-    weight_decay=1e-4,
-)
+        extractor.load_encoder_weights(str(checkpoint))
 
-# ============================================================
-# Trainer
-# ============================================================
-trainer = Trainer(
-    builder=builder,
-    train_preprocessor=train_preprocessor,
-    val_preprocessor=val_preprocessor,
-    metrics=metrics,
-    encoder=extractor,
-    criterion=criterion,
-    optimizer=optimizer,
-    threshold=args.threshold,
-)
+        print(
+            "Loaded checkpoint:",
+            checkpoint,
+        )
+    else:
+        print("Using pretrained SpeechBrain encoder")
 
-# ============================================================
-# Report
-# ============================================================
-report = BaselineReport(REPORT_DIR)
+    # Criterion
+    criterion = AAMSoftmax(
+        num_classes=test_dataset.get_num_speakers(),
+    )
 
-# ============================================================
-# Validation
-# ============================================================
-result = trainer.validate(test_dataset)
+    optimizer = torch.optim.AdamW(
+        list(extractor.parameters()) + list(criterion.parameters()),
+        lr=1e-4,
+        weight_decay=1e-4,
+    )
 
-metrics = result["metrics"]
+    # Trainer
+    trainer = Trainer(
+        builder=builder,
+        train_preprocessor=train_preprocessor,
+        val_preprocessor=val_preprocessor,
+        metrics=metrics,
+        encoder=extractor,
+        criterion=criterion,
+        optimizer=optimizer,
+        threshold=args.threshold,
+        disable=args.disable,
+    )
 
-print()
-print("=" * 60)
-print("Speaker Verification Metrics")
-print("=" * 60)
+    # Validation
+    result = trainer.validate(test_dataset)
+    metrics_result = result["metrics"]
 
-print(f"{'Accuracy':20}: {metrics['accuracy']:.4f}")
-print(f"{'Precision':20}: {metrics['precision']:.4f}")
-print(f"{'Recall':20}: {metrics['recall']:.4f}")
-print(f"{'F1-score':20}: {metrics['f1']:.4f}")
-print(f"{'ROC AUC':20}: {metrics['roc_auc']:.4f}")
-print(f"{'EER':20}: {metrics['eer']:.4f}")
-print(f"{'Threshold':20}: {metrics['threshold']:.4f}")
+    print("=" * 60)
+    print("Speaker Dataset Statistics")
+    print("=" * 60)
 
-print()
-print("Confusion Matrix")
-print("-" * 60)
+    print(f"Count speakers                  : {dataset_stats['num_speakers']:.4f}")
+    print(f"Count audio files               : {dataset_stats['num_samples']:.4f}")
+    print(f"Min count recordings            : {dataset_stats['min_qty']:.4f}")
+    print(f"Max count recordings            : {dataset_stats['max_qty']:.4f}")
+    print(f"Mean count recordings           : {dataset_stats['mean_qty']:.4f}")
+    print(f"Median count recordings         : {dataset_stats['median_qty']:.4f}")
+    print(f"Std count recordings            : {dataset_stats['std_qty']:.4f}")
+    print()
 
-cm = metrics["confusion_matrix"]
+    print("=" * 60)
+    print(f"Min duration recordings         : {dataset_stats['min_duration']:.4f}")
+    print(f"Max duration recordings         : {dataset_stats['max_duration']:.4f}")
+    print(f"Mean duration recordings        : {dataset_stats['mean_duration']:.4f}")
+    print(f"Median duration recordings      : {dataset_stats['median_duration']:.4f}")
+    print(f"Std duration recordings         : {dataset_stats['std_duration']:.4f}")
+    print("=" * 60)
+    print()
 
-print(f"{'':18}Predicted")
-print(f"{'':18}Different      Same")
-print(f"{'Actual Different':18}{cm[0][0]:10d}{cm[0][1]:10d}")
-print(f"{'Actual Same':18}{cm[1][0]:10d}{cm[1][1]:10d}")
+    print("Top-10 speakers")
+    print("=" * 60)
+    for speaker, n in dataset_stats['distribution'].most_common(10):
+        print(f"{speaker:15s}                 : {n}")
+    print("=" * 60)
+    print()
 
-print()
-print("Normalized Confusion Matrix")
-print("-" * 60)
+    print("Speaker Verification Metrics")
+    print("=" * 60)
+    print(f"Accuracy                        : {metrics_result['accuracy']:.4f}")
+    print(f"Precision                       : {metrics_result['precision']:.4f}")
+    print(f"Recall                          : {metrics_result['recall']:.4f}")
+    print(f"F1-score                        : {metrics_result['f1']:.4f}")
+    print(f"ROC AUC                         : {metrics_result['roc_auc']:.4f}")
+    print(f"EER                             : {metrics_result['eer']:.4f}")
+    print(f"Threshold                       : {metrics_result['threshold']:.4f}")
+    print("=" * 60)
+    print()
 
-cm = metrics["confusion_matrix_normalized"]
+    # Save report
+    report = BaselineReport(report_dir)
 
-print(f"{'':18}Predicted")
-print(f"{'':18}Different      Same")
-print(f"{'Actual Different':18}{cm[0][0]:10.4f}{cm[0][1]:10.4f}")
-print(f"{'Actual Same':18}{cm[1][0]:10.4f}{cm[1][1]:10.4f}")
+    report.save(
+        metrics=metrics_result,
+        pairs=result["pairs"],
+        scores=result["scores"],
+        labels=result["labels"],
+        dataset_stats=dataset_stats,
+        plotter=plotter,
+    )
 
-print("=" * 60)
+    print("Baseline report successfully saved")
+    print("Directory:", report_dir)
 
-# ============================================================
-# Save report
-# ============================================================
-report.save(
-    metrics=result["metrics"],
-    pairs=result["pairs"],
-    scores=result["scores"],
-    labels=result["labels"],
-    plotter=plotter,
-)
 
-print()
-print("Baseline report successfully saved")
-print("Directory:", REPORT_DIR)
+if __name__ == "__main__":
+    main()

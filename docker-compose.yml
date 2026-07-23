@@ -15,6 +15,7 @@ services:
       - ./runs:/app/runs
       - ./reports:/app/reports
       - ./debug_audio:/app/debug_audio
+      - ./archives:/app/archives
 
     gpus: all
 

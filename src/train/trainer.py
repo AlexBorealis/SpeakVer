@@ -20,6 +20,7 @@ class Trainer:
         scheduler=None,
         threshold=None,
         save_dir="runs",
+        disable: bool = False,
     ):
         self.builder = builder
         # TODO: поменять препроцессоры
@@ -43,6 +44,8 @@ class Trainer:
         self.weights = self.save_dir / "weights"
 
         self.best_eer = float("inf")
+
+        self.disable = disable
 
     def train(self, loader):
         self.encoder.train()
@@ -85,7 +88,7 @@ class Trainer:
         embedding_cache = {}
         unique_samples = {}
 
-        for pair in tqdm(pairs):
+        for pair in tqdm(pairs, disable=self.disable):
             sample1 = pair["sample1"]
             sample2 = pair["sample2"]
 
@@ -93,7 +96,9 @@ class Trainer:
             unique_samples[get_sample_key(sample2)] = sample2
 
         with torch.no_grad():
-            for key, sample in tqdm(unique_samples.items(), desc="Extract embeddings"):
+            for key, sample in tqdm(
+                unique_samples.items(), desc="Extract embeddings", disable=self.disable
+            ):
                 waveform = self.val_preprocessor.load_audio(get_audio_input(sample))
 
                 embedding_cache[key] = self.encoder.extract(waveform)
@@ -102,7 +107,7 @@ class Trainer:
         scores = []
         labels = []
 
-        for pair in tqdm(pairs, desc="Cosine similarity"):
+        for pair in tqdm(pairs, desc="Cosine similarity", disable=self.disable):
             sample1 = pair["sample1"]
             sample2 = pair["sample2"]
 

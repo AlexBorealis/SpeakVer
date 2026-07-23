@@ -37,6 +37,8 @@ RUN mkdir -p \
 VOLUME ["/app/datasets"]
 VOLUME ["/app/reports"]
 VOLUME ["/app/runs"]
+VOLUME ["/app/debug_audio"]
+VOLUME ["/app/archives"]
 
 EXPOSE 7860
 
