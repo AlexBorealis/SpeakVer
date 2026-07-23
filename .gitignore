@@ -5,12 +5,19 @@
 draft
 docs
 results
-.continue
 speaker_dataset
+datasets
+archives
+runs
+reports
+.continue
+.gradio
+.ruff_cache
 
 # Different files
 *.txt
 *.json
+draft*
 
 # Models structure
 args.yaml
