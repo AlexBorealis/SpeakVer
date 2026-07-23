@@ -34,7 +34,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 ARCHIVES_DIR = BASE_DIR / "archives"
 REPORTS_DIR = BASE_DIR / "reports"
 
-RUNS_DIR = Path(os.getenv("LOCAL_RUNS_DIR", "runs"))
+RUNS_DIR = Path(os.getenv("RUNS_DIR", "runs"))
 
 SERVER_NAME = os.getenv(
     "SERVER_NAME",

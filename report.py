@@ -75,10 +75,10 @@ def parse_args():
 # Report directory
 # ============================================================
 def prepare_output_dir(output_dir: str | None) -> Path:
+    report_dir = Path(f"report_{datetime.now():%Y%m%d_%H%M%S}")
+
     if output_dir:
-        report_dir = Path(output_dir)
-    else:
-        report_dir = Path(f"report_{datetime.now():%Y%m%d_%H%M%S}")
+        report_dir = Path(f"{report_dir}_{output_dir}")
 
     report_dir = (REPORTS_DIR / report_dir).resolve()
 
