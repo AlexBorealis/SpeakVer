@@ -18,6 +18,7 @@ reports
 *.txt
 *.json
 draft*
+task.md
 
 # Models structure
 args.yaml
