@@ -4,3 +4,11 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]  # Проверять ошибки Pyflakes (F), PEP 8 (E), сортировку импортов (I)
+
+[project.optional-dependencies]
+dev = [
+    "commitizen",
+    "ruff",
+    "black",
+    "pytest",
+]

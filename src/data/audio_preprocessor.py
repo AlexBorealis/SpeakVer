@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import traceback
 from pathlib import Path
 
 import torch
@@ -167,38 +168,60 @@ class AudioPreprocessor:
 
         counters = {}
 
-        for sample in tqdm(samples):
-            speaker_id = sample["speaker_id"]
+        saved = 0
+        failed = 0
 
-            speaker_dir = output_dir / speaker_id
+        for sample in tqdm(samples, leave=False):
+            try:
+                speaker_id = sample["speaker_id"]
 
-            speaker_dir.mkdir(parents=True, exist_ok=True)
+                speaker_dir = output_dir / speaker_id
+                speaker_dir.mkdir(parents=True, exist_ok=True)
 
-            if speaker_id not in counters:
-                existing = list(speaker_dir.glob("*.wav"))
+                if speaker_id not in counters:
+                    counters[speaker_id] = len(list(speaker_dir.glob("*.wav")))
 
-                counters[speaker_id] = len(existing)
+                counters[speaker_id] += 1
 
-            counters[speaker_id] += 1
+                filename = f"{counters[speaker_id]:06d}.wav"
 
-            filename = f"{counters[speaker_id]:06d}.wav"
+                waveform = self.load_audio(sample[microphone])
 
-            waveform = self.load_audio(sample[microphone])
+                torchaudio.save(
+                    str(speaker_dir / filename),
+                    waveform.cpu(),
+                    self.target_sr,
+                )
 
-            torchaudio.save(str(speaker_dir / filename), waveform.cpu(), self.target_sr)
+                metadata = {
+                    "speaker_id": sample["speaker_id"],
+                    "gender": sample.get("gender"),
+                    "sentence_id": sample.get("sentence_id"),
+                    "duration": sample.get("duration"),
+                    "raw_text": sample.get("raw_text"),
+                    "normalized_text": sample.get("normalized_text"),
+                    "phonemized_text": sample.get("phonemized_text"),
+                    "filename": filename,
+                }
 
-            metadata = {
-                "speaker_id": sample["speaker_id"],
-                "gender": sample.get("gender"),
-                "sentence_id": sample.get("sentence_id"),
-                "duration": sample.get("duration"),
-                "raw_text": sample.get("raw_text"),
-                "normalized_text": sample.get("normalized_text"),
-                "phonemized_text": sample.get("phonemized_text"),
-                "filename": filename,
-            }
+                with open(
+                    speaker_dir / f"{Path(filename).stem}.json",
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(metadata, f, ensure_ascii=False, indent=4)
 
-            metadata_path = speaker_dir / f"{Path(filename).stem}.json"
+                saved += 1
 
-            with open(metadata_path, "w", encoding="utf-8") as f:
-                json.dump(metadata, f, ensure_ascii=False, indent=4)
+            except Exception:
+                failed += 1
+
+                print("=" * 80)
+                print(f"Failed to process sample #{saved + failed}")
+                print(f"Speaker : {sample.get('speaker_id', '<unknown>')}")
+                print(traceback.format_exc())
+                print("=" * 80)
+
+        print(f"Batch finished. Saved: {saved}, Failed: {failed}")
+
+        return saved, failed

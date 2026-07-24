@@ -16,9 +16,6 @@ class AuthService:
             USER1_LOGIN
             USER1_PASSWORD
 
-            USER2_LOGIN
-            USER2_PASSWORD
-
             ...
 
         Returns
@@ -28,7 +25,6 @@ class AuthService:
         """
 
         users = []
-
         index = 1
 
         while True:
@@ -58,8 +54,6 @@ class AuthService:
         users = AuthService.get_users()
 
         if not users:
-            raise RuntimeError(
-                "No users configured. Check your .env file."
-            )
+            raise RuntimeError("No users configured. Check your .env file.")
 
         return users
