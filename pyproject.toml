@@ -1,14 +1,39 @@
+[project]
+name = "SpeakVer"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "commitizen",
+    "pytest",
+    "ruff",
+]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]  # Проверять ошибки Pyflakes (F), PEP 8 (E), сортировку импортов (I)
-
-[project.optional-dependencies]
-dev = [
-    "commitizen",
-    "ruff",
-    "black",
-    "pytest",
+select = [
+    "E", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
 ]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+version_provider = "pep621"
+tag_format = "v$version"
+update_changelog_on_bump = true
+major_version_zero = true
+version_files = [
+    "pyproject.toml:version",
+]
+changelog_file = "CHANGELOG.md"
