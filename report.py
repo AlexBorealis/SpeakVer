@@ -44,12 +44,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--no-balance",
-        action="store_true",
-        help="Disable positive/negative pair balancing",
-    )
-
-    parser.add_argument(
         "--threshold",
         type=float,
         default=None,
@@ -63,9 +57,15 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--progress",
+        "--disable",
         action="store_true",
         help="Disable progress bar",
+    )
+
+    parser.add_argument(
+        "--balance",
+        action="store_true",
+        help="Enable balancing of validation pairs",
     )
 
     return parser.parse_args()
@@ -121,7 +121,10 @@ def main():
     val_preprocessor = AudioPreprocessor()
 
     # Utils
-    builder = PairBuilder(balance=not args.no_balance)
+    builder = PairBuilder(
+        balance=args.balance,
+        disable=args.disable,
+    )
     metrics = Metrics()
     plotter = Plotter()
 
@@ -164,7 +167,7 @@ def main():
         criterion=criterion,
         optimizer=optimizer,
         threshold=args.threshold,
-        progress=args.progress,
+        disable=args.disable,
     )
 
     # Validation
@@ -195,7 +198,7 @@ def main():
 
     print("Top-10 speakers")
     print("=" * 60)
-    for speaker, n in dataset_stats['distribution'].most_common(10):
+    for speaker, n in dataset_stats["distribution"].most_common(10):
         print(f"{speaker:15s}                 : {n}")
     print("=" * 60)
     print()

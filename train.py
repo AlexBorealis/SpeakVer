@@ -59,7 +59,7 @@ def parse_args():
         "--model_path",
         type=str,
         default=None,
-        help="Checkpoint for resuming training.",
+        help="Path to checkpoint.",
     )
 
     parser.add_argument(
