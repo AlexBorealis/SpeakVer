@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+import torch.optim.lr_scheduler as lrs
 from tqdm import tqdm
 
 from src.utils.utils import get_audio_input, get_sample_key
@@ -20,16 +21,19 @@ class Trainer:
         scheduler=None,
         threshold=None,
         save_dir="runs",
-        disable: bool = False,
+        early_stop_patience=12,
+        disable=True,
     ):
         self.builder = builder
-        # TODO: поменять препроцессоры
+
         self.train_preprocessor = train_preprocessor
         self.val_preprocessor = val_preprocessor
 
         self.metrics = metrics
+
         self.encoder = encoder
         self.criterion = criterion
+
         self.optimizer = optimizer
         self.scheduler = scheduler
 
@@ -44,21 +48,37 @@ class Trainer:
         self.weights = self.save_dir / "weights"
 
         self.best_eer = float("inf")
+        self.epochs_without_improvement = 0
+        self.early_stop_patience = early_stop_patience
 
         self.disable = disable
 
+        # Validation cache
+        self.val_pairs = None
+
+        # уникальные аудиозаписи для extraction
+        self.val_unique_samples = None
+
+        # чтобы понимать, тот ли dataset используется
+        self.val_dataset_id = None
+
+    # ==========================================================
+    # Train
+    # ==========================================================
     def train(self, loader):
         self.encoder.train()
         self.criterion.train()
 
-        total_loss = 0
+        total_loss = 0.0
 
-        pbar = tqdm(loader)
-        for waveforms, labels in pbar:
+        iterator = tqdm(loader, disable=self.disable)
+
+        for waveforms, labels in iterator:
             waveforms = waveforms.to(
                 self.device,
                 non_blocking=True,
             )
+
             labels = labels.to(
                 self.device,
                 non_blocking=True,
@@ -66,7 +86,10 @@ class Trainer:
 
             embeddings = self.encoder(waveforms)
 
-            loss, _ = self.criterion(embeddings, labels)
+            loss, _ = self.criterion(
+                embeddings,
+                labels,
+            )
 
             self.optimizer.zero_grad()
 
@@ -76,110 +99,224 @@ class Trainer:
 
             total_loss += loss.item()
 
-            pbar.set_postfix(loss=f"{loss.item():.4f}")
+            iterator.set_postfix(loss=f"{loss.item():.4f}")
 
         return total_loss / len(loader)
 
+    # ==========================================================
+    # Prepare validation cache
+    # ==========================================================
+    def _prepare_validation_cache(self, dataset):
+        dataset_id = id(dataset)
+
+        # уже подготовлено
+        if self.val_pairs is not None and self.val_dataset_id == dataset_id:
+            return
+
+        print("Preparing validation pairs cache...")
+
+        # создание или загрузка через PairBuilder
+        self.val_pairs = self.builder.build(dataset)
+
+        self.val_unique_samples = {}
+
+        for pair in tqdm(
+            self.val_pairs,
+            desc="Collect validation samples",
+            disable=self.disable,
+        ):
+            self.val_unique_samples[get_sample_key(pair["sample1"])] = pair["sample1"]
+            self.val_unique_samples[get_sample_key(pair["sample2"])] = pair["sample2"]
+
+        self.val_dataset_id = dataset_id
+
+        print(
+            f"Validation cache ready: "
+            f"{len(self.val_pairs)} pairs, "
+            f"{len(self.val_unique_samples)} samples"
+        )
+
+    # ==========================================================
+    # Validation
+    # ==========================================================
     def validate(self, dataset):
         self.encoder.eval()
 
-        pairs = self.builder.build(dataset)
+        # Prepare cache
+        self._prepare_validation_cache(dataset)
+        pairs = self.val_pairs
 
-        embedding_cache = {}
-        unique_samples = {}
-
-        for pair in tqdm(pairs, disable=self.disable):
-            sample1 = pair["sample1"]
-            sample2 = pair["sample2"]
-
-            unique_samples[get_sample_key(sample1)] = sample1
-            unique_samples[get_sample_key(sample2)] = sample2
+        # Extract embeddings
+        embeddings = []
+        sample_to_idx = {}
 
         with torch.no_grad():
-            for key, sample in tqdm(
-                unique_samples.items(), desc="Extract embeddings", disable=self.disable
+            for idx, (key, sample) in enumerate(
+                tqdm(
+                    self.val_unique_samples.items(),
+                    desc="Extract embeddings",
+                    disable=self.disable,
+                )
             ):
                 waveform = self.val_preprocessor.load_audio(get_audio_input(sample))
+                emb = self.encoder.extract(waveform)
 
-                embedding_cache[key] = self.encoder.extract(waveform)
+                # гарантируем shape [192]
+                emb = emb.squeeze(0)
+                embeddings.append(emb)
+                sample_to_idx[key] = idx
 
-        # Calculate cosine similarity
-        scores = []
+        # [num_samples, embedding_dim]
+        embeddings = torch.stack(embeddings).to(self.device)
+
+        # Convert pairs -> indexes
+        idx1 = []
+        idx2 = []
         labels = []
 
-        for pair in tqdm(pairs, desc="Cosine similarity", disable=self.disable):
-            sample1 = pair["sample1"]
-            sample2 = pair["sample2"]
-
-            emb1 = embedding_cache[get_sample_key(sample1)]
-            emb2 = embedding_cache[get_sample_key(sample2)]
-
-            score = F.cosine_similarity(emb1, emb2, dim=0)
-
-            scores.append(score.item())
+        for pair in pairs:
+            idx1.append(sample_to_idx[get_sample_key(pair["sample1"])])
+            idx2.append(sample_to_idx[get_sample_key(pair["sample2"])])
             labels.append(pair["label"])
 
-        scores = torch.tensor(scores)
-        labels = torch.tensor(labels)
+        idx1 = torch.tensor(
+            idx1,
+            device=self.device,
+        )
+        idx2 = torch.tensor(
+            idx2,
+            device=self.device,
+        )
+        labels = torch.tensor(
+            labels,
+            dtype=torch.long,
+        )
+
+        # Fast cosine similarity
+        with torch.no_grad():
+            emb1 = embeddings[idx1]
+            emb2 = embeddings[idx2]
+            scores = F.cosine_similarity(
+                emb1,
+                emb2,
+                dim=1,
+            )
+
+        # для metrics CPU
+        scores_cpu = scores.cpu()
+        labels_cpu = labels.cpu()
 
         threshold = (
-            self.metrics.find_best_threshold(scores, labels)
+            self.metrics.find_best_threshold(
+                scores_cpu.numpy(),
+                labels_cpu.numpy(),
+            )
             if self.threshold is None
             else self.threshold
         )
 
-        result = self.metrics.evaluate(labels, scores, threshold)
+        result = self.metrics.evaluate(
+            labels_cpu.numpy(),
+            scores_cpu.numpy(),
+            threshold,
+        )
 
-        return {"metrics": result, "pairs": pairs, "labels": labels, "scores": scores}
+        return {
+            "metrics": result,
+            "pairs": pairs,
+            "labels": labels_cpu,
+            "scores": scores_cpu,
+        }
 
-    def step_scheduler(self):
-        if self.scheduler is not None:
+    # ==========================================================
+    # Scheduler
+    # ==========================================================
+    def step_scheduler(self, metric=None):
+        if self.scheduler is None:
+            return
+
+        if isinstance(
+            self.scheduler,
+            lrs.ReduceLROnPlateau,
+        ):
+            if metric is None:
+                raise ValueError("ReduceLROnPlateau requires validation metric.")
+
+            self.scheduler.step(metric)
+        else:
             self.scheduler.step()
 
+    # ==========================================================
+    # Utils
+    # ==========================================================
     def get_lr(self):
         return self.optimizer.param_groups[0]["lr"]
 
-    def save_checkpoint(self, epoch, train_loss, metrics):
+    # ==========================================================
+    # Checkpoints
+    # ==========================================================
+    def save_checkpoint(
+        self,
+        epoch,
+        train_loss,
+        metrics,
+    ):
         self.weights.mkdir(
             parents=True,
             exist_ok=True,
         )
 
         checkpoint = {
-            # Training state
             "epoch": int(epoch),
             "train_loss": float(train_loss),
-            # Model
             "encoder": self.encoder.state_dict(),
             "criterion": self.criterion.state_dict(),
-            # Optimization
             "optimizer": self.optimizer.state_dict(),
             "scheduler": (
                 self.scheduler.state_dict() if self.scheduler is not None else None
             ),
-            # Metrics
             "eer": float(metrics["metrics"]["eer"]),
-            "best_eer": float(self.best_eer),
             "roc_auc": float(metrics["metrics"]["roc_auc"]),
             "accuracy": float(metrics["metrics"]["accuracy"]),
             "threshold": float(metrics["metrics"]["threshold"]),
-            # Learning rate
+            "best_eer": float(self.best_eer),
             "lr": float(self.get_lr()),
         }
 
-        torch.save(checkpoint, self.weights / "last.pt")
+        torch.save(
+            checkpoint,
+            self.weights / "last.pt",
+        )
 
-        if checkpoint["eer"] < self.best_eer:
+        return checkpoint
+
+    def update_best(self, checkpoint):
+        improved = checkpoint["eer"] < self.best_eer
+
+        if improved:
             self.best_eer = checkpoint["eer"]
+            self.epochs_without_improvement = 0
 
-            torch.save(checkpoint, self.weights / "best.pt")
+            checkpoint["best_eer"] = self.best_eer
+
+            torch.save(
+                checkpoint,
+                self.weights / "best.pt",
+            )
+
+        else:
+            self.epochs_without_improvement += 1
+
+        return improved
+
+    def should_stop(self):
+        return self.epochs_without_improvement >= self.early_stop_patience
+
+    # ==========================================================
+    # Load
+    # ==========================================================
 
     def load_checkpoint(self, path):
-        """
-        Полностью восстанавливает состояние обучения.
-
-        Возвращает epoch, с которого необходимо продолжить обучение.
-        """
         print("=" * 60)
         print(f"Loading checkpoint: {path}")
         print("=" * 60)
@@ -190,68 +327,35 @@ class Trainer:
             weights_only=False,
         )
 
-        # Model
         self.encoder.load_state_dict(checkpoint["encoder"])
-        # Criterion
+
         if checkpoint.get("criterion") is not None:
             self.criterion.load_state_dict(checkpoint["criterion"])
-        # Optimizer
+
         if checkpoint.get("optimizer") is not None:
             self.optimizer.load_state_dict(checkpoint["optimizer"])
-        # Scheduler
+
         if self.scheduler is not None and checkpoint.get("scheduler") is not None:
             self.scheduler.load_state_dict(checkpoint["scheduler"])
-        # Best metric
+
         self.best_eer = checkpoint.get(
-            "eer",
-            float("inf"),
-        )
-        epoch = checkpoint.get(
-            "epoch",
-            0,
-        )
-        train_loss = checkpoint.get(
-            "train_loss",
-            None,
-        )
-        eer = checkpoint.get(
-            "eer",
-            None,
-        )
-        roc_auc = checkpoint.get(
-            "roc_auc",
-            None,
-        )
-        accuracy = checkpoint.get(
-            "accuracy",
-            None,
-        )
-        threshold = checkpoint.get(
-            "threshold",
-            None,
-        )
-        lr = checkpoint.get(
-            "lr",
-            None,
+            "best_eer",
+            checkpoint.get(
+                "eer",
+                float("inf"),
+            ),
         )
 
-        # Information
+        epoch = checkpoint.get("epoch", 0)
+
         print(f"Epoch      : {epoch}")
-        if train_loss is not None:
-            print(f"Train loss : {train_loss:.4f}")
-        if eer is not None:
-            print(f"EER        : {eer:.4f}")
-        if roc_auc is not None:
-            print(f"ROC-AUC    : {roc_auc:.4f}")
-        if accuracy is not None:
-            print(f"Accuracy   : {accuracy:.4f}")
-        if threshold is not None:
-            print(f"Threshold  : {threshold:.4f}")
-        if lr is not None:
-            print(f"LR         : {lr:.2e}")
-        else:
-            current_lr = self.optimizer.param_groups[0]["lr"]
-            print(f"LR         : {current_lr:.2e} (current)")
+        print(f"Train loss : {checkpoint.get('train_loss', 0):.4f}")
+        print(f"EER        : {checkpoint.get('eer', 0):.4f}")
+        print(f"ROC-AUC    : {checkpoint.get('roc_auc', 0):.4f}")
+        print(f"Accuracy   : {checkpoint.get('accuracy', 0):.4f}")
+        print(f"Threshold  : {checkpoint.get('threshold', 0):.4f}")
+        print(f"Best EER   : {self.best_eer:.4f}")
+        print(f"LR         : {self.get_lr():.2e}")
         print("=" * 60)
 
         return epoch + 1

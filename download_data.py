@@ -12,6 +12,9 @@ from src.config import HF_TOKEN
 from src.data.audio_preprocessor import AudioPreprocessor
 
 
+# ============================================================
+# Arguments
+# ============================================================
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Download VibraVox dataset from Hugging Face.",
@@ -67,6 +70,9 @@ def parse_args():
     return parser.parse_args()
 
 
+# ============================================================
+# Main
+# ============================================================
 def main():
     args = parse_args()
 
