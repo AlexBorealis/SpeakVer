@@ -6,6 +6,9 @@ from src.gradio.services.auth_service import AuthService
 from src.gradio.ui.layout import create_app
 
 
+# ============================================================
+# Main
+# ============================================================
 def main() -> None:
     """
     Application entry point.

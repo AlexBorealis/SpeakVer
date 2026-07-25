@@ -63,7 +63,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--disable",
+        "--progress",
         action="store_true",
         help="Disable progress bar",
     )
@@ -164,7 +164,7 @@ def main():
         criterion=criterion,
         optimizer=optimizer,
         threshold=args.threshold,
-        disable=args.disable,
+        progress=args.progress,
     )
 
     # Validation
