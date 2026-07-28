@@ -5,7 +5,7 @@
 draft
 docs
 results
-speaker_dataset
+speaker_dataset*
 datasets
 archives
 runs
@@ -17,6 +17,7 @@ reports
 # Different files
 *.txt
 *.json
+*.zip
 draft*
 task.md
 
@@ -36,6 +37,10 @@ args.yaml
 *.mpeg4
 *.mp4
 *mkv
+
+# Audio
+*.wav
+*.mp3
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

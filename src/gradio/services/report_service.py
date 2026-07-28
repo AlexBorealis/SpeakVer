@@ -82,8 +82,8 @@ class ReportService:
                 ]
             )
 
-        if not balance:
-            cmd.append("--no-balance")
+        if balance:
+            cmd.append("--balance")
 
         process = subprocess.run(
             cmd,

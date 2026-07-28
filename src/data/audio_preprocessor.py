@@ -3,6 +3,7 @@ import os
 import random
 import traceback
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -15,63 +16,67 @@ from tqdm import tqdm
 class AudioPreprocessor:
     def __init__(
         self,
-        target_sr=8000,
-        mono=True,
-        resample=True,
-        remove_dc=True,
-        peak_normalize=True,
-        vad=True,
-        augment=False,
-        random_crop=False,
-        max_duration=5.0,
-        target_peak=0.8,
-        vad_trigger_level=15.0,
-        vad_search_time=0.03,
+        target_sr: int = 8000,
+        mono: bool = True,
+        resample: bool = True,
+        augment: bool = False,
+        max_duration: float = 5.0,
+        fix_length: bool = False,
+        remove_dc: bool = True,
+        peak_normalize: bool = True,
+        target_peak: float = 0.8,
+        vad: bool = True,
+        vad_trigger_level: float = 15.0,
+        vad_search_time: float = 0.03,
     ):
         self.target_sr = target_sr
-
         self.mono = mono
         self.resample = resample
-        self.remove_dc = remove_dc
-        self.peak_normalize = peak_normalize
-        self.vad = vad
 
         self.augment = augment
 
         self.max_duration = max_duration
+        self.fix_length = fix_length
         self.max_samples = int(target_sr * max_duration)
 
-        self.random_crop = random_crop
-
+        self.remove_dc = remove_dc
+        self.peak_normalize = peak_normalize
         self.target_peak = target_peak
+
+        self.vad = vad
         self.vad_trigger_level = vad_trigger_level
         self.vad_search_time = vad_search_time
 
         self.resamplers = {}
 
-    def _get_resampler(self, sample_rate):
+    def __call__(
+        self,
+        audio_input: str | Path | dict | Any,
+    ) -> tuple[torch.Tensor, int]:
+        waveform, sample_rate = self.load_audio(audio_input)
+
+        waveform, length = self.process_audio(waveform, sample_rate)
+
+        return waveform, length
+
+    def _get_resampler(self, sample_rate: int):
         if sample_rate not in self.resamplers:
             self.resamplers[sample_rate] = AT.Resample(sample_rate, self.target_sr)
 
         return self.resamplers[sample_rate]
 
-    def _fix_length(self, waveform):
+    def _fix_length(self, waveform: torch.Tensor) -> torch.Tensor:
         length = waveform.shape[-1]
 
-        if length > self.max_samples:
-            if self.random_crop:
-                start = random.randint(0, length - self.max_samples)
-            else:
-                start = 0
-
-            waveform = waveform[:, start : start + self.max_samples]
+        if length >= self.max_samples:
+            waveform = waveform[:, 0 : 0 + self.max_samples]
 
         elif length < self.max_samples:
             waveform = F.pad(waveform, (0, self.max_samples - length))
 
         return waveform
 
-    def _augment(self, waveform):
+    def _augment(self, waveform: torch.Tensor) -> torch.Tensor:
         if random.random() < 0.5:
             noise_level = random.uniform(0.002, 0.01)
 
@@ -84,89 +89,140 @@ class AudioPreprocessor:
 
         return torch.clamp(waveform, -1, 1)
 
-    def load_audio(self, audio_input):
+    def load_audio(
+        self,
+        audio_input: str | Path | dict | Any,
+    ) -> tuple[torch.Tensor, int]:
+        """
+        Загружает аудио без какой-либо обработки.
+
+        Parameters
+        ----------
+        audio_input
+            Путь к файлу, HuggingFace Audio, словарь
+            {"array", "sampling_rate"} или другой поддерживаемый объект.
+
+        Returns
+        -------
+        waveform
+            Tensor [channels, samples]
+
+        sample_rate
+            Частота дискретизации.
+        """
+
         if hasattr(audio_input, "get_all_samples"):
             audio = audio_input.get_all_samples()
-            waveform = audio.data
 
-            sample_rate = audio.sample_rate
+            return audio.data, audio.sample_rate
 
-        elif isinstance(audio_input, dict):
-            waveform = torch.tensor(
-                audio_input["array"], dtype=torch.float32
-            ).unsqueeze(0)
+        if isinstance(audio_input, dict):
+            return (
+                torch.tensor(
+                    audio_input["array"],
+                    dtype=torch.float32,
+                ).unsqueeze(0),
+                audio_input["sampling_rate"],
+            )
 
-            sample_rate = audio_input["sampling_rate"]
+        if isinstance(audio_input, (str, Path)):
+            return torchaudio.load(audio_input)
 
-        elif isinstance(audio_input, (str, None)):
-            waveform, sample_rate = torchaudio.load(audio_input)
-        else:
-            raise TypeError(f"Unsupported audio type: {type(audio_input)}")
+        raise TypeError(f"Unsupported audio type: {type(audio_input)}")
 
-        if self.mono:
-            if waveform.shape[0] > 1:
-                waveform = waveform.mean(dim=0, keepdim=True)
+    def process_audio(
+        self,
+        waveform: torch.Tensor,
+        sample_rate: int,
+    ) -> tuple[torch.Tensor, int]:
+        """
+        Выполняет всю предобработку аудио.
 
-        if self.resample:
-            if sample_rate != self.target_sr:
-                waveform = self._get_resampler(sample_rate)(waveform)
+        Returns
+        -------
+        waveform
+            Обработанный сигнал.
+
+        length
+            Итоговая длина после обработки
+            (в количестве сэмплов).
+        """
+
+        if self.mono and waveform.shape[0] > 1:
+            waveform = waveform.mean(dim=0, keepdim=True)
+
+        if self.resample and sample_rate != self.target_sr:
+            waveform = self._get_resampler(sample_rate)(waveform)
+            sample_rate = self.target_sr
 
         if self.remove_dc:
             waveform = waveform - waveform.mean()
 
         if self.peak_normalize:
-            peak = waveform.abs().max()
+            peak = waveform.abs().amax()
+
             if peak > 0:
                 waveform = waveform / peak
-                waveform = waveform * self.target_peak
+                waveform *= self.target_peak
 
         if self.vad:
             try:
                 voiced = AF.vad(
                     waveform,
-                    sample_rate=self.target_sr,
+                    sample_rate=sample_rate,
                     trigger_level=self.vad_trigger_level,
                     search_time=self.vad_search_time,
                 )
 
-                if voiced.numel() > 0:
+                if voiced.numel():
                     waveform = voiced
+
             except Exception:
                 pass
 
         if self.augment:
             waveform = self._augment(waveform)
 
-        waveform = self._fix_length(waveform)
+        if self.fix_length:
+            waveform = self._fix_length(waveform)
 
-        return waveform
+        return waveform, waveform.shape[-1]
 
-    def save_audio(self, audio_input, output_dir="debug_audio", filename="sample.wav"):
+    def save_audio(
+        self, audio_input, output_dir: str = "debug_audio", filename: str = "sample.wav"
+    ) -> str:
         os.makedirs(output_dir, exist_ok=True)
 
-        waveform = self.load_audio(audio_input)
+        waveform, sr = self.load_audio(audio_input)
 
         if not filename.lower().endswith(".wav"):
             filename += ".wav"
 
         path = os.path.join(output_dir, filename)
 
-        torchaudio.save(path, waveform.cpu(), self.target_sr)
+        torchaudio.save(path, waveform.cpu(), sr)
 
         return path
 
     def save_samples(
         self,
         samples,
-        output_dir="speaker_dataset",
-        microphone="audio.throat_microphone",
-    ):
+        output_dir: str = "speaker_dataset",
+    ) -> tuple[int, int]:
+
         if isinstance(samples, dict):
             samples = [samples]
 
         output_dir = Path(output_dir)
 
-        counters = {}
+        microphones = [
+            "audio.headset_microphone",
+            "audio.forehead_accelerometer",
+            "audio.soft_in_ear_microphone",
+            "audio.rigid_in_ear_microphone",
+            "audio.temple_vibration_pickup",
+            "audio.throat_microphone",
+        ]
 
         saved = 0
         failed = 0
@@ -174,42 +230,54 @@ class AudioPreprocessor:
         for sample in tqdm(samples, leave=False):
             try:
                 speaker_id = sample["speaker_id"]
+                sentence_id = str(sample["sentence_id"])
 
                 speaker_dir = output_dir / speaker_id
-                speaker_dir.mkdir(parents=True, exist_ok=True)
-
-                if speaker_id not in counters:
-                    counters[speaker_id] = len(list(speaker_dir.glob("*.wav")))
-
-                counters[speaker_id] += 1
-
-                filename = f"{counters[speaker_id]:06d}.wav"
-
-                waveform = self.load_audio(sample[microphone])
-
-                torchaudio.save(
-                    str(speaker_dir / filename),
-                    waveform.cpu(),
-                    self.target_sr,
+                speaker_dir.mkdir(
+                    parents=True,
+                    exist_ok=True,
                 )
 
-                metadata = {
-                    "speaker_id": sample["speaker_id"],
-                    "gender": sample.get("gender"),
-                    "sentence_id": sample.get("sentence_id"),
-                    "duration": sample.get("duration"),
-                    "raw_text": sample.get("raw_text"),
-                    "normalized_text": sample.get("normalized_text"),
-                    "phonemized_text": sample.get("phonemized_text"),
-                    "filename": filename,
-                }
+                metadata = {}
+
+                for key, value in sample.items():
+                    if key.startswith("audio."):
+                        continue
+
+                    metadata[key] = value
+
+                metadata["filename"] = f"{sentence_id}.wav"
 
                 with open(
-                    speaker_dir / f"{Path(filename).stem}.json",
+                    speaker_dir / f"{sentence_id}.json",
                     "w",
                     encoding="utf-8",
                 ) as f:
-                    json.dump(metadata, f, ensure_ascii=False, indent=4)
+                    json.dump(
+                        metadata,
+                        f,
+                        ensure_ascii=False,
+                        indent=4,
+                    )
+
+                for microphone in microphones:
+                    if microphone not in sample:
+                        continue
+
+                    mic_name = microphone.removeprefix("audio.")
+
+                    mic_dir = speaker_dir / mic_name
+                    mic_dir.mkdir(
+                        exist_ok=True,
+                    )
+
+                    audio = sample[microphone].get_all_samples()
+
+                    torchaudio.save(
+                        str(mic_dir / f"{sentence_id}.wav"),
+                        audio.data.cpu(),
+                        audio.sample_rate,
+                    )
 
                 saved += 1
 
@@ -217,8 +285,9 @@ class AudioPreprocessor:
                 failed += 1
 
                 print("=" * 80)
-                print(f"Failed to process sample #{saved + failed}")
-                print(f"Speaker : {sample.get('speaker_id', '<unknown>')}")
+                print(f"Failed sample #{saved + failed}")
+                print(f"Speaker : {sample.get('speaker_id')}")
+                print(f"Sentence: {sample.get('sentence_id')}")
                 print(traceback.format_exc())
                 print("=" * 80)
 

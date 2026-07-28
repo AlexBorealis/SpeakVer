@@ -2,9 +2,70 @@ import random
 import shutil
 from pathlib import Path
 
+import torch
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Subset
 
 from src.train.speaker_dataset import SpeakerDataset
+
+
+def collate_fn(batch: list[dict]) -> dict:
+    """
+    Collate function для speaker verification.
+
+    Выполняет:
+    - padding до максимальной длины внутри batch;
+    - вычисление относительных длин;
+    - формирование labels.
+
+    Parameters
+    ----------
+    batch
+        Список элементов Dataset.
+
+        Каждый элемент:
+
+        {
+            "waveform": Tensor [1, T],
+            "length": int,
+            "speaker": int,
+        }
+
+    Returns
+    -------
+    dict
+
+        {
+            "waveforms": Tensor [B, 1, Tmax],
+            "lengths": Tensor [B],
+            "labels": Tensor [B],
+        }
+    """
+
+    waveforms = [sample["waveform"].squeeze(0) for sample in batch]
+
+    lengths = torch.tensor(
+        [sample["length"] for sample in batch],
+        dtype=torch.long,
+    )
+
+    labels = torch.tensor(
+        [sample["speaker"] for sample in batch],
+        dtype=torch.long,
+    )
+
+    waveforms = pad_sequence(
+        waveforms,
+        batch_first=True,
+    )
+
+    relative_lengths = lengths.float() / lengths.max()
+
+    return {
+        "waveforms": waveforms,
+        "lengths": relative_lengths,
+        "labels": labels,
+    }
 
 
 def has_speaker_dirs(path):
@@ -107,23 +168,3 @@ def split_dataset(
         SpeakerDataset(str(output_dir / "val")),
         SpeakerDataset(str(output_dir / "test")),
     )
-
-
-def get_audio_input(item):
-    keys = ["audio.throat_microphone", "path", "audio"]
-
-    for key in keys:
-        if key in item:
-            return item[key]
-
-    raise KeyError(f"Audio field not found. Available keys: {item.keys()}")
-
-
-def get_sample_key(sample):
-    if "path" in sample:
-        return sample["path"]
-
-    if "id" in sample:
-        return str(sample["id"])
-
-    return str(id(sample))

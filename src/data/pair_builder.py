@@ -7,13 +7,13 @@ from pathlib import Path
 class PairBuilder:
     def __init__(
         self,
-        random_seed=42,
-        balance=False,
-        negative_ratio=None,
-        max_positive_pairs=None,
-        max_negative_pairs=None,
-        cache_filename=None,
-        disable=True,
+        random_seed: int = 42,
+        balance: bool = False,
+        negative_ratio: float | None = None,
+        max_positive_pairs: int | None = None,
+        max_negative_pairs: int | None = None,
+        cache_filename: str | None = None,
+        disable: bool = True,
     ):
         """
         Builds speaker verification pairs.
@@ -63,7 +63,9 @@ class PairBuilder:
         self.max_positive_pairs = max_positive_pairs
         self.max_negative_pairs = max_negative_pairs
 
-        self.cache_filename = Path(cache_filename) if cache_filename is not None else None
+        self.cache_filename = (
+            Path(cache_filename) if cache_filename is not None else None
+        )
 
         self.disable = disable
 
@@ -110,12 +112,10 @@ class PairBuilder:
         if cached_pairs is not None:
             return cached_pairs
 
-        samples = list(dataset)
-
         positive_pairs = []
         negative_pairs = []
 
-        for sample1, sample2 in combinations(samples, 2):
+        for sample1, sample2 in combinations(dataset, 2):
             pair = {
                 "sample1": sample1,
                 "sample2": sample2,
@@ -170,7 +170,7 @@ class PairBuilder:
             print("=" * 60)
             print(f"Positive pairs                        : {len(positive_pairs)}")
             print(f"Negative pairs                        : {len(negative_pairs)}")
-            print(f"Negative/Positive ratio               : {ratio}")
+            print(f"Positive/Negative ratio               : {ratio}")
             print(f"Total pairs                           : {len(pairs)}")
             print()
 
