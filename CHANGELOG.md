@@ -1,3 +1,11 @@
+## v0.2.0 (2026-07-29)
+
+### Feat
+
+- **training**: improve data processing and model training
+- **report**: add new functions and metrics
+- **download**: improve dataset loading
+
 ## v0.1.0 (2026-07-25)
 
 ### Feat
