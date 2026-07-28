@@ -17,6 +17,7 @@ reports
 # Different files
 *.txt
 *.json
+*.zip
 draft*
 task.md
 

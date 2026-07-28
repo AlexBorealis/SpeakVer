@@ -29,10 +29,10 @@ class SpeakerVerifier:
         self.model.to(device)
         self.model.eval()
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def get_embedding(self, audio_path: str):
-        wave = self.preprocessor.load_audio(audio_path)
-        embedding = self.model.extract(wave)
+        waveform, _ = self.preprocessor.load_audio(audio_path)
+        embedding = self.model.extract(waveform)
 
         return embedding
 

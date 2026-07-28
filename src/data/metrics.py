@@ -45,8 +45,8 @@ class Metrics:
 
     def evaluate(
         self,
-        labels,
         scores,
+        labels,
         threshold,
     ):
 

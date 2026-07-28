@@ -6,7 +6,13 @@ import torch.nn.functional as F
 
 
 class AAMSoftmax(nn.Module):
-    def __init__(self, embedding_dim=192, num_classes=149, margin=0.2, scale=30):
+    def __init__(
+        self,
+        embedding_dim: int = 192,
+        num_classes: int = 149,
+        margin: float = 0.2,
+        scale: int = 30,
+    ):
         super().__init__()
 
         self.margin = margin

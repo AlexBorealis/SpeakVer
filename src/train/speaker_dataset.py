@@ -1,9 +1,12 @@
-import json
+import random
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
+import soundfile as sf
 from torch.utils.data import Dataset
+
+from src.data.audio_preprocessor import AudioPreprocessor
 
 
 class SpeakerDataset(Dataset):
@@ -24,12 +27,21 @@ class SpeakerDataset(Dataset):
 
     AUDIO_EXTENSIONS = {".wav", ".flac", ".mp3", ".ogg", ".m4a"}
 
-    def __init__(self, root_dir, preprocessor=None, return_audio=True):
+    def __init__(
+        self,
+        root_dir,
+        preprocessor: AudioPreprocessor = None,
+        return_audio: bool = True,
+        microphone: str | None = None,
+        shuffle: bool = False,
+    ):
         super().__init__()
 
         self.root_dir = Path(root_dir)
         self.preprocessor = preprocessor
         self.return_audio = return_audio
+        self.microphone = microphone
+        self.shuffle = shuffle
 
         self.samples = []
         self.speakers = {}
@@ -39,17 +51,32 @@ class SpeakerDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int):
         sample = self.samples[index]
 
-        # режим для PairBuilder / validation
         if not self.return_audio:
             return sample
 
-        # режим обучения
-        waveform = self.preprocessor.load_audio(sample["path"])
+        config = random.choice(list(sample["domains"]))
 
-        return (waveform.squeeze(0), sample["speaker_index"])
+        microphones = sample["domains"][config]
+
+        microphone = self.microphone
+        if self.shuffle and self.microphone is None:
+            microphone = random.choice(list(microphones))
+
+        path = microphones[microphone]
+
+        waveform, length = self.preprocessor(path)
+
+        return {
+            "waveform": waveform.squeeze(0),
+            "speaker": sample["speaker_index"],
+            "length": length,
+            "config": config,
+            "microphone": microphone,
+            "path": path,
+        }
 
     def get_speakers(self):
         return self.speakers
@@ -60,70 +87,98 @@ class SpeakerDataset(Dataset):
     def get_num_samples(self):
         return len(self.samples)
 
+    def get_mic_type(self):
+        config = random.choice(list(self.samples[0]["domains"]))
+        
+        microphones = self.samples[0]["domains"][config]
+        return list(microphones.keys())
+
     def _scan(self):
         self.samples.clear()
         self.speakers.clear()
 
+        recordings = {}
+
         speaker_index = 0
 
-        for speaker_dir in sorted(self.root_dir.iterdir()):
-            if not speaker_dir.is_dir():
+        # speech_clean, speech_noise, ...
+        for config_dir in sorted(self.root_dir.iterdir()):
+            if not config_dir.is_dir():
                 continue
 
-            speaker_name = speaker_dir.name
-            self.speakers[speaker_name] = speaker_index
+            config = config_dir.name
 
-            for file in speaker_dir.rglob("*"):
-                if not file.is_file():
+            # speaker_001
+            for speaker_dir in sorted(config_dir.iterdir()):
+                if not speaker_dir.is_dir():
                     continue
 
-                if file.suffix.lower() not in self.AUDIO_EXTENSIONS:
-                    continue
+                speaker_id = speaker_dir.name
 
-                duration = None
+                if speaker_id not in self.speakers:
+                    self.speakers[speaker_id] = speaker_index
+                    speaker_index += 1
 
-                metadata_file = file.with_suffix(".json")
+                speaker_idx = self.speakers[speaker_id]
 
-                if metadata_file.exists():
-                    try:
-                        with open(metadata_file, encoding="utf-8") as f:
-                            metadata = json.load(f)
+                for microphone_dir in speaker_dir.iterdir():
+                    if not microphone_dir.is_dir():
+                        continue
 
-                        duration = metadata.get("duration")
+                    microphone = microphone_dir.name
 
-                    except Exception:
-                        duration = None
+                    for wav_path in microphone_dir.glob("*.wav"):
+                        recording = wav_path.stem
 
-                self.samples.append(
-                    {
-                        "speaker_id": speaker_name,
-                        "speaker_index": speaker_index,
-                        "path": str(file),
-                        "duration": duration,
-                    }
-                )
+                        key = (
+                            speaker_id,
+                            recording,
+                        )
 
-            speaker_index += 1
+                        if key not in recordings:
+                            recordings[key] = {
+                                "speaker_id": speaker_id,
+                                "speaker_index": speaker_idx,
+                                "recording": recording,
+                                "domains": {},
+                            }
+
+                        recordings[key]["domains"].setdefault(config, {})[
+                            microphone
+                        ] = str(wav_path)
+
+        self.samples = list(recordings.values())
 
     def statistics(self):
         """
-        Statistics of Dataset
+        Statistics of Dataset.
         """
-        counter = Counter()
+
+        speaker_counter = Counter()
+        domain_counter = Counter()
+        microphone_counter = Counter()
 
         durations = []
 
         for sample in self.samples:
-            counter[sample["speaker_id"]] += 1
+            speaker_counter[sample["speaker_id"]] += 1
 
-            if sample["duration"] is not None:
-                durations.append(sample["duration"])
+            for domain, microphones in sample["domains"].items():
+                domain_counter[domain] += 1
 
-        counts = np.array(list(counter.values()))
+                for microphone, _ in microphones.items():
+                    microphone_counter[microphone] += 1
+
+                # Берем длительность только один раз для данного домена
+                first_path = next(iter(microphones.values()))
+                info = sf.info(first_path)
+                durations.append(info.duration)
+
+        counts = np.array(list(speaker_counter.values()))
         durations = np.array(durations)
 
         return {
-            "num_speakers": len(counter),
+            "num_speakers": len(speaker_counter),
             "num_samples": len(self.samples),
             "min_qty": int(counts.min()),
             "max_qty": int(counts.max()),
@@ -133,9 +188,11 @@ class SpeakerDataset(Dataset):
             "min_duration": float(durations.min()),
             "max_duration": float(durations.max()),
             "mean_duration": float(durations.mean()),
-            "median_duration": float(np.nanmedian(durations)),
+            "median_duration": float(np.median(durations)),
             "std_duration": float(durations.std()),
-            "distribution": counter,
+            "domain_distribution": dict(domain_counter),
+            "microphone_distribution": dict(microphone_counter),
+            "speaker_distribution": speaker_counter,
         }
 
     def summary(self):
