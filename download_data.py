@@ -17,54 +17,69 @@ from src.data.audio_preprocessor import AudioPreprocessor
 # ============================================================
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Download VibraVox dataset from Hugging Face.",
+        description="Download VibraVox dataset.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-        Examples:
-            Download first 3000 samples:
-                python -m download_data --n 3000
-
-            Download in background:
-                nohup bash -c 'echo "PID: $$"; exec python -u -m download_data --n 3000' > download_data.log 2>&1 &
-
-            Monitor progress:
-                tail -f download_data.log
-        """,
-    )
-
-    parser.add_argument(
-        "--config_path",
-        type=str,
-        default="config/envs/.env",
-        help="Path to environment configuration.",
+            nohup bash -c '
+            echo "PID: $$"
+            exec python -u -m download_data \
+                --dataset_path="speaker_dataset_new" \
+                --batch_size=500 \
+                --configs speech_clean speech_noisy \
+                --splits train validation test \
+                --n 5000 1500 500
+            ' > download_data.log 2>&1 &
+        """
     )
 
     parser.add_argument(
         "--dataset_path",
-        type=str,
         default="speaker_dataset",
-        help="Directory where dataset will be saved.",
+        type=str,
     )
 
     parser.add_argument(
-        "--split",
-        type=str,
-        default="train",
-        help="Which split of the data to load.",
+        "--configs",
+        nargs="+",
+        default=["speech_clean"],
+        choices=[
+            "speech_clean",
+            "speech_noisy",
+        ],
+    )
+
+    parser.add_argument(
+        "--splits",
+        nargs="+",
+        default=[
+            "train",
+            "validation",
+            "test",
+        ],
+        choices=[
+            "train",
+            "validation",
+            "test",
+        ],
     )
 
     parser.add_argument(
         "--n",
+        nargs="+",
         type=int,
-        default=100,
-        help="Number of samples to download.",
+        default=[100],
+        help=(
+            "Number of samples.\n"
+            "Example:\n"
+            "--splits train validation test\n"
+            "--n 5000 1500 500"
+        ),
     )
 
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=50,
-        help="Number of samples processed before writing to disk.",
+        default=500,
     )
 
     return parser.parse_args()
@@ -74,73 +89,142 @@ def parse_args():
 # Main
 # ============================================================
 def main():
+
     args = parse_args()
 
+    if len(args.n) == 1:
+        split_sizes = {split: args.n[0] for split in args.splits}
+
+    elif len(args.n) == len(args.splits):
+        split_sizes = dict(
+            zip(
+                args.splits,
+                args.n,
+            )
+        )
+
+    else:
+        raise ValueError(
+            "Number of values in --n must be either 1 or equal to number of splits."
+        )
+
     print("=" * 80)
-    print(f"Started : {datetime.now()}")
-    print(f"PID     : {os.getpid()}")
-    print(f"Samples : {args.n}")
-    print(f"Batch   : {args.batch_size}")
+    print(f"Started      : {datetime.now()}")
+    print(f"PID          : {os.getpid()}")
+    print(f"Configs      : {args.configs}")
+    print(f"Splits       : {args.splits}")
+    print(f"Samples      : {split_sizes}")
+    print(f"Batch size   : {args.batch_size}")
     print("=" * 80)
 
     login(token=HF_TOKEN)
 
-    dataset = load_dataset(
-        "Cnam-LMSSC/vibravox",
-        "speech_clean",
-        split=args.split,
-        streaming=True,
-    )
-
     preprocessor = AudioPreprocessor()
 
-    batch = []
-    saved = 0
-    batch_idx = 1
+    total_saved = 0
+    total_failed = 0
 
-    progress = tqdm(
-        dataset.take(args.n),
-        total=args.n,
-        unit="sample",
-    )
+    for config in args.configs:
+        for split in args.splits:
+            requested = split_sizes[split]
 
-    for sample in progress:
-        batch.append(sample)
+            print("\n" + "=" * 80)
+            print(f"Dataset  : {config}")
+            print(f"Split    : {split}")
+            print(f"Requested: {requested}")
+            print("=" * 80)
 
-        if len(batch) >= args.batch_size:
-            print(
-                f"[{datetime.now()}] "
-                f"Saving batch #{batch_idx} ({len(batch)} samples)..."
+            dataset = load_dataset(
+                path="Cnam-LMSSC/vibravox",
+                name=config,
+                split=split,
+                streaming=True,
             )
 
-            preprocessor.save_samples(
-                batch,
-                output_dir=args.dataset_path,
+            output_dir = os.path.join(
+                args.dataset_path,
+                split,
+                config,
             )
 
-            saved += len(batch)
-            batch.clear()
-            batch_idx += 1
+            batch = []
 
-    if batch:
-        print(f"[{datetime.now()}] Saving final batch ({len(batch)} samples)...")
+            saved = 0
+            failed = 0
 
-        preprocessor.save_samples(
-            batch,
-            output_dir=args.dataset_path,
-        )
+            batch_idx = 1
 
-        saved += len(batch)
+            progress = tqdm(
+                dataset.take(requested),
+                total=requested,
+                desc=f"{split}/{config}",
+                unit="sample",
+            )
 
-    print("=" * 80)
+            for sample in progress:
+                batch.append(sample)
+
+                if len(batch) < args.batch_size:
+                    continue
+
+                print(f"[{datetime.now()}] Saving batch #{batch_idx}")
+
+                batch_saved, batch_failed = preprocessor.save_samples(
+                    batch,
+                    output_dir=output_dir,
+                )
+
+                saved += batch_saved
+                failed += batch_failed
+
+                total_saved += batch_saved
+                total_failed += batch_failed
+
+                batch.clear()
+                batch_idx += 1
+
+                progress.set_postfix(
+                    saved=saved,
+                    failed=failed,
+                )
+
+            if batch:
+                print(f"[{datetime.now()}] Saving final batch")
+
+                batch_saved, batch_failed = preprocessor.save_samples(
+                    batch,
+                    output_dir=output_dir,
+                )
+
+                saved += batch_saved
+                failed += batch_failed
+
+                total_saved += batch_saved
+                total_failed += batch_failed
+
+            if saved < requested:
+                print(f"WARNING: requested {requested}, saved only {saved} samples.")
+
+            print("-" * 80)
+            print(f"Finished : {split}/{config}")
+            print(f"Saved    : {saved}")
+            print(f"Failed   : {failed}")
+            print("-" * 80)
+
+    print("\n" + "=" * 80)
     print("SUCCESS")
-    print(f"Saved samples : {saved}")
-    print(f"Finished      : {datetime.now()}")
+    print(f"Total saved  : {total_saved}")
+    print(f"Total failed : {total_failed}")
+    print(f"Finished     : {datetime.now()}")
     print("=" * 80)
 
 
+# ============================================================
+# Entry point
+# ============================================================
 if __name__ == "__main__":
     try:
+        login(token=HF_TOKEN)
         main()
 
     except KeyboardInterrupt:

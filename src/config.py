@@ -36,6 +36,7 @@ REPORTS_DIR = BASE_DIR / "reports"
 
 RUNS_DIR = Path(os.getenv("RUNS_DIR", "runs"))
 
+# Gradio parameters
 SERVER_NAME = os.getenv(
     "SERVER_NAME",
     "0.0.0.0",
@@ -47,3 +48,24 @@ SERVER_PORT = int(
         "7860",
     )
 )
+
+# Train hyperparameters
+LR = os.getenv("LR", 1e-4)
+WEIGHT_DECAY = os.getenv("WEIGHT_DECAY", 1e-4)
+ENCODER_LR = os.getenv("ENCODER_LR", 1e-4)
+CLASSIFIER_LR = os.getenv("CLASSIFIER_LR", 1e-4)
+
+AAM_MARGIN = os.getenv("AAM_MARGIN", 0.3)
+AAM_SCALE = os.getenv("AAM_SCALE", 30)
+
+SCHED_MODE = os.getenv("SCHED_MODE", "min")
+SCHED_FACTOR = os.getenv("SCHED_FACTOR", 0.5)
+SCHED_PATIENCE = os.getenv("SCHED_PATIENCE", 10)
+SCHED_THRESHOLD = os.getenv("SCHED_THRESHOLD", 1e-4)
+SCHED_THRESHOLD_MODE = os.getenv("SCHED_THRESHOLD_MODE", "rel")
+SCHED_COOLDOWN = os.getenv("SCHED_COOLDOWN", 2)
+SCHED_MIN_LR = os.getenv("SCHED_MIN_LR", 1e-6)
+SCHED_MULT = os.getenv("SCHED_MULT", 2)
+
+WARMUP_EPOCHS = os.getenv("WARMUP_EPOCHS", 3)
+EARLY_STOP_PATIENCE = os.getenv("EARLY_STOP_PATIENCE", 20)
