@@ -7,7 +7,7 @@ import torch
 
 
 class BaselineReport:
-    def __init__(self, output_dir="baseline_report"):
+    def __init__(self, output_dir: str = "baseline_report"):
         self.output_dir = output_dir
 
         os.makedirs(self.output_dir, exist_ok=True)
@@ -190,10 +190,5 @@ class BaselineReport:
             f.write(f"F1-score                        : {metrics['f1']:.4f}\n")
             f.write(f"ROC-AUC                         : {metrics['roc_auc']:.4f}\n")
             f.write(f"EER                             : {metrics['eer']:.4f}\n")
+            f.write(f"MinDCF                          : {metrics['min_dcf']:.4f}\n")
             f.write(f"Threshold                       : {metrics['threshold']:.4f}\n\n")
-
-        # print()
-        # print("=" * 60)
-        # print("Report successfully saved")
-        # print(f"Directory: {self.output_dir}")
-        # print("=" * 60)

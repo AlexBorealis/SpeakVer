@@ -44,6 +44,26 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--device",
+        type=str,
+        default="cpu",
+    )
+
+    parser.add_argument(
+        "--microphone",
+        default="throat_microphone",
+        choices=[
+            "headset_microphone",
+            "forehead_accelerometer",
+            "soft_in_ear_microphone",
+            "rigid_in_ear_microphone",
+            "temple_vibration_pickup",
+            "throat_microphone",
+        ],
+        help="Microphone type fo training.",
+    )
+
+    parser.add_argument(
         "--threshold",
         type=float,
         default=None,
@@ -51,21 +71,15 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--device",
-        type=str,
-        default="cpu",
+        "--balance",
+        action="store_true",
+        help="Enable balancing of validation pairs",
     )
 
     parser.add_argument(
         "--disable",
         action="store_true",
         help="Disable progress bar",
-    )
-
-    parser.add_argument(
-        "--balance",
-        action="store_true",
-        help="Enable balancing of validation pairs",
     )
 
     return parser.parse_args()
@@ -113,6 +127,7 @@ def main():
     test_dataset = SpeakerDataset(
         args.dataset_path,
         return_audio=False,
+        microphone=args.microphone
     )
     dataset_stats = test_dataset.statistics()
 
@@ -146,13 +161,13 @@ def main():
     else:
         print("Using pretrained SpeechBrain encoder")
 
-    # Criterion
-    criterion = AAMSoftmax(
+    # classifier
+    classifier = AAMSoftmax(
         num_classes=test_dataset.get_num_speakers(),
     )
 
     optimizer = torch.optim.AdamW(
-        list(extractor.parameters()) + list(criterion.parameters()),
+        list(extractor.parameters()) + list(classifier.parameters()),
         lr=1e-4,
         weight_decay=1e-4,
     )
@@ -164,7 +179,7 @@ def main():
         val_preprocessor=val_preprocessor,
         metrics=metrics,
         encoder=extractor,
-        criterion=criterion,
+        classifier=classifier,
         optimizer=optimizer,
         threshold=args.threshold,
         disable=args.disable,
@@ -198,7 +213,7 @@ def main():
 
     print("Top-10 speakers")
     print("=" * 60)
-    for speaker, n in dataset_stats["distribution"].most_common(10):
+    for speaker, n in dataset_stats["speaker_distribution"].most_common(10):
         print(f"{speaker:15s}                 : {n}")
     print("=" * 60)
     print()
@@ -211,6 +226,7 @@ def main():
     print(f"F1-score                        : {metrics_result['f1']:.4f}")
     print(f"ROC AUC                         : {metrics_result['roc_auc']:.4f}")
     print(f"EER                             : {metrics_result['eer']:.4f}")
+    print(f"MinDCF                          : {metrics_result['min_dcf']:.4f}")
     print(f"Threshold                       : {metrics_result['threshold']:.4f}")
     print("=" * 60)
     print()

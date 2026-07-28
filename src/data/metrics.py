@@ -105,6 +105,17 @@ class Metrics:
             normalize="true",
         )
 
+        p_target = 0.01  # Априорная вероятность целевого спикера
+        c_miss = 1.0     # Штраф за пропуск истинного спикера (FRR)
+        c_fa = 1.0       # Штраф за ложный допуск чужого спикера (FPR)
+
+        # Считаем стоимость для каждой точки ROC-кривой
+        dcf = c_miss * fnr * p_target + c_fa * fpr * (1.0 - p_target)
+        # Дефолтная стоимость системы, которая всегда говорит "нет" или всегда "да"
+        dcf_baseline = min(c_miss * p_target, c_fa * (1.0 - p_target))
+        # Находим минимальную нормализованную стоимость
+        min_dcf = float(np.min(dcf / dcf_baseline))
+
         return {
             "accuracy": accuracy,
             "precision": precision,
@@ -112,6 +123,7 @@ class Metrics:
             "f1": f1,
             "roc_auc": roc_auc,
             "eer": eer,
+            "min_dcf": min_dcf, 
             "threshold": threshold,
             "confusion_matrix": cm,
             "confusion_matrix_normalized": cm_norm,

@@ -1,5 +1,5 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class Plotter:
@@ -72,23 +72,45 @@ class Plotter:
         plt.close()
 
     def plot_confusion_matrix(self, metrics, save_path="confusion_matrix.png"):
-        cm = metrics["confusion_matrix"]
+        cm = np.array(metrics["confusion_matrix"])
+        cm_norm = np.array(metrics["confusion_matrix_normalized"])
 
-        plt.figure(figsize=(5, 5))
-        plt.imshow(cm)
+        # Создаем холст с двумя графиками (1 строка, 2 колонки)
+        _, axes = plt.subplots(1, 2, figsize=(11, 5))
+        labels = ["Different", "Same"]
 
-        plt.xticks([0, 1], ["Different", "Same"])
-        plt.yticks([0, 1], ["Different", "Same"])
+        # --- Левый график: Обычная матрица ошибок ---
+        axes[0].imshow(cm, cmap="Blues")  # cmap добавит контраста тексту
+        axes[0].set_xticks([0, 1])
+        axes[0].set_xticklabels(labels)
+        axes[0].set_yticks([0, 1])
+        axes[0].set_yticklabels(labels)
+        axes[0].set_xlabel("Predicted")
+        axes[0].set_ylabel("Ground Truth")
+        axes[0].set_title("Confusion Matrix")
 
-        plt.xlabel("Predicted")
-        plt.ylabel("Ground Truth")
-        plt.title("Confusion Matrix")
+        # --- Правый график: Нормализованная матрица ошибок ---
+        axes[1].imshow(cm_norm, cmap="Blues")
+        axes[1].set_xticks([0, 1])
+        axes[1].set_xticklabels(labels)
+        axes[1].set_yticks([0, 1])
+        axes[1].set_yticklabels(labels)
+        axes[1].set_xlabel("Predicted")
+        axes[1].set_ylabel("Ground Truth")
+        axes[1].set_title("Normalized Confusion Matrix")
 
+        # Добавляем текстовые значения в ячейки обоих графиков
         for i in range(2):
             for j in range(2):
-                plt.text(j, i, str(cm[i, j]), ha="center", va="center", fontsize=14)
+                # Текст для обычной матрицы (целые числа)
+                axes[0].text(
+                    j, i, str(int(cm[i, j])), ha="center", va="center", fontsize=14
+                )
+                # Текст для нормализованной (проценты с 2 знаками после запятой)
+                axes[1].text(
+                    j, i, f"{cm_norm[i, j]:.2f}", ha="center", va="center", fontsize=14
+                )
 
         plt.tight_layout()
-
         plt.savefig(save_path, dpi=300)
         plt.close()
