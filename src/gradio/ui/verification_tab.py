@@ -26,13 +26,14 @@ def update_checkpoints(experiment):
     )
 
 
-def load_model(experiment, checkpoint):
+def load_model(experiment, checkpoint, device):
     """
     Load selected model.
     """
     status = ModelService.load_model(
         experiment,
         checkpoint,
+        device
     )
 
     return (
@@ -87,6 +88,12 @@ def create_verification_tab():
                 label="Checkpoint",
             )
 
+            device = gr.Dropdown(
+                choices=["cpu", "cuda"],
+                value="cuda",
+                label="Device",
+            )
+
         model_status = gr.Textbox(
             label="Model status",
             value="Using default SpeechBrain ECAPA-TDNN",
@@ -112,6 +119,20 @@ def create_verification_tab():
             inputs=[
                 experiment,
                 checkpoint,
+                device,
+            ],
+            outputs=[
+                model_status,
+                threshold,
+            ],
+        )
+
+        device.change(
+            fn=load_model,
+            inputs=[
+                experiment,
+                checkpoint,
+                device,
             ],
             outputs=[
                 model_status,

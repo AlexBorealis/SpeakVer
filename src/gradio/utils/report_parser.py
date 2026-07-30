@@ -47,6 +47,7 @@ def parse_report(console_output: str) -> dict:
         "f1": _extract(console_output, "F1-score"),
         "roc_auc": _extract(console_output, "ROC AUC"),
         "eer": _extract(console_output, "EER"),
+        "min_dcf": _extract(console_output, "MinDCF"),
         "threshold": _extract(console_output, "Threshold"),
         # Report
         "directory": _extract(console_output, "Directory"),

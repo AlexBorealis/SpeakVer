@@ -34,4 +34,5 @@
 | F1-score | {f1} |
 | ROC AUC | {roc_auc} |
 | EER | {eer} |
+| MinDCF | {min_dcf} |
 | Threshold | {threshold} |

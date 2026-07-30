@@ -16,6 +16,7 @@ class ModelService:
     def load_model(
         experiment: str,
         checkpoint: str,
+        device: str = DEFAULT_DEVICE
     ) -> str:
         """
         Load selected checkpoint.
@@ -29,7 +30,7 @@ class ModelService:
         state.verifier = SpeakerVerifier(
             checkpoint=checkpoint_path,
             threshold=DEFAULT_THRESHOLD,
-            device=DEFAULT_DEVICE,
+            device=device,
         )
 
         state.current_checkpoint = checkpoint_path

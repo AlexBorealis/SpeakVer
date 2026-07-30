@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.config import (
     ARCHIVES_DIR,
+    DEFAULT_DEVICE,
     DEFAULT_REPORT_DATASET,
 )
 from src.gradio.utils.archive import make_zip
@@ -53,15 +54,18 @@ class ReportService:
         experiment: str,
         report_dir: str | None = None,
         dataset_path: str = DEFAULT_REPORT_DATASET,
-        balance: bool = True,
+        device: str = DEFAULT_DEVICE,
+        negative_ratio: float | None = 10,
+        balance: bool = False,
     ) -> ReportResult:
-
         cmd = [
             "python",
             "report.py",
             "--dataset_path",
             dataset_path,
-            "--disable"
+            "--device",
+            device,
+            "--disable",
         ]
 
         if report_dir and report_dir.strip():
@@ -79,6 +83,14 @@ class ReportService:
                 [
                     "--model_path",
                     str(checkpoint),
+                ]
+            )
+
+        if negative_ratio:
+            cmd.extend(
+                [
+                    "--negative_ratio",
+                    str(negative_ratio),
                 ]
             )
 

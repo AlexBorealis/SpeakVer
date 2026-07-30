@@ -9,6 +9,8 @@ def generate_report(
     experiment,
     report_dir,
     dataset_path,
+    device,
+    negative_ratio,
     balance,
 ):
     """
@@ -19,6 +21,8 @@ def generate_report(
         experiment=experiment,
         report_dir=report_dir,
         dataset_path=dataset_path,
+        device=device,
+        negative_ratio=negative_ratio,
         balance=balance,
     )
 
@@ -47,12 +51,18 @@ def create_report_tab():
     models = get_models()
 
     with gr.Tab("Report"):
+        with gr.Row():
+            report_experiment = gr.Dropdown(
+                choices=["Default model"] + models,
+                value="Default model",
+                label="Experiment",
+            )
 
-        report_experiment = gr.Dropdown(
-            choices=["Default model"] + models,
-            value="Default model",
-            label="Experiment",
-        )
+            report_device = gr.Dropdown(
+                choices=["cpu", "cuda"],
+                value="cuda",
+                label="Device",
+            )
 
         report_directory = gr.Textbox(
             label="Report directory",
@@ -64,8 +74,15 @@ def create_report_tab():
             label="Dataset path",
         )
 
+        report_negative_ratio = gr.Slider(
+            minimum=0.01,
+            value=10,
+            step=0.1,
+            label="How much times negative pairs bigger than positive",
+        )
+
         report_balance = gr.Checkbox(
-            value=True,
+            value=False,
             label="Balance positive/negative pairs",
         )
 
@@ -89,6 +106,8 @@ def create_report_tab():
                 report_experiment,
                 report_directory,
                 report_dataset,
+                report_device,
+                report_negative_ratio,
                 report_balance,
             ],
             outputs=[
