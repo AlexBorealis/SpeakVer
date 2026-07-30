@@ -4,9 +4,10 @@ import os
 import pickle
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import perf_counter
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -18,6 +19,7 @@ from src.config import (
     EARLY_STOP_PATIENCE,
     ENCODER_LR,
     SCHED_MIN_LR,
+    TARGET_SAMPLE_RATE,
     WARMUP_EPOCHS,
     WEIGHT_DECAY,
 )
@@ -190,6 +192,12 @@ def parse_args():
         help="Enable balancing of validation pairs.",
     )
 
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Continue last training.",
+    )
+
     return parser.parse_args()
 
 
@@ -200,16 +208,17 @@ def main():
     args = parse_args()
 
     unfreeze_schedule = {
-        5: [
+        1: [
             "classifier",
         ],
-        10: [
+        4: [
             "asp",
             "asp_bn",
             "fc",
             "classifier",
         ],
         30: [
+            "seres2netblock3",
             "mfa",
             "asp",
             "asp_bn",
@@ -239,19 +248,13 @@ def main():
 
     metrics = Metrics()
 
-    train_preprocessor = AudioPreprocessor(
-        augment=True, target_sr=args.target_sr, fix_length=False, max_duration=7
-    )
-
-    val_preprocessor = AudioPreprocessor(
-        target_sr=args.target_sr, fix_length=False, max_duration=7
-    )
-
     # Dataset split
     split_dataset(
         SpeakerDataset(
             args.dataset_path,
+            microphone=args.microphone,
             return_audio=False,
+            shuffle=False,
         ),
         train_ratio=args.train_ratio,
         val_ratio=args.val_ratio,
@@ -261,6 +264,14 @@ def main():
         output_dir=args.dataset_path,
     )
 
+    train_preprocessor = AudioPreprocessor(
+        augment=True, target_sr=args.target_sr, fix_length=False, max_duration=7
+    )
+
+    val_preprocessor = AudioPreprocessor(
+        target_sr=args.target_sr, fix_length=False, max_duration=7
+    )
+
     # Datasets
     # Train
     train_dataset = SpeakerDataset(
@@ -268,6 +279,7 @@ def main():
         preprocessor=train_preprocessor,
         microphone=args.microphone,
         return_audio=True,
+        shuffle=False,
     )
 
     val_dataset = SpeakerDataset(
@@ -275,8 +287,25 @@ def main():
         preprocessor=val_preprocessor,
         microphone=args.microphone,
         return_audio=False,
+        shuffle=False,
     )
 
+    # Saving dataset statistics
+    train_dataset_stats = train_dataset.statistics()
+    val_dataset_stats = val_dataset.statistics()
+
+    train_dataset.save_dataset_stats(
+        train_dataset_stats,
+        save_dir=args.save_dir,
+        file_path="trian_dataset_stats.json",
+    )
+    val_dataset.save_dataset_stats(
+        val_dataset_stats,
+        save_dir=args.save_dir,
+        file_path="val_dataset_stats.json",
+    )
+
+    # Dynamic batch size
     if not os.path.exists(f"{args.dataset_path}/lengths_cache.pkl"):
         lengths = [
             item["length"] for item in tqdm(train_dataset, total=len(train_dataset))
@@ -288,32 +317,41 @@ def main():
         with open(f"{args.dataset_path}/lengths_cache.pkl", "rb") as file:
             lengths = pickle.load(file)
 
+    max_batch_length = int(
+        np.quantile(train_dataset_stats["durations_distribution"], 0.9)
+        * args.batch_size
+        * TARGET_SAMPLE_RATE
+    )
+
     batch_sampler = DynamicBatchSampler(
         lengths=lengths,
-        max_batch_length=2500000,
-        bucket_size=256,
+        max_batch_length=max_batch_length,
+        bucket_size=512,
         max_batch_size=args.batch_size,
         min_batch_size=4,
         shuffle=True,
+        seed=42,
     )
 
-    train_loader = DataLoader(
-        train_dataset,
-        # batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=8,
-        persistent_workers=True,
-        collate_fn=collate_fn,
-        batch_sampler=batch_sampler,
-        pin_memory=True,
-    )
-
-    # Validation
-    val_dataset = SpeakerDataset(
-        f"{args.dataset_path}/val",
-        preprocessor=val_preprocessor,
-        return_audio=False,
-    )
+    if batch_sampler is None:
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=8,
+            persistent_workers=True,
+            collate_fn=collate_fn,
+            pin_memory=True,
+        )
+    else:
+        train_loader = DataLoader(
+            train_dataset,
+            num_workers=8,
+            persistent_workers=True,
+            collate_fn=collate_fn,
+            batch_sampler=batch_sampler,
+            pin_memory=True,
+        )
 
     # Model
     extractor = EmbeddingExtractor(
@@ -323,47 +361,34 @@ def main():
     # Training components
     classifier = AAMSoftmax(
         num_classes=train_dataset.get_num_speakers(),
-        margin=float(AAM_MARGIN),
-        scale=int(AAM_SCALE),
+        margin=AAM_MARGIN,
+        scale=AAM_SCALE,
     )
 
     optimizer = torch.optim.AdamW(
         [
             {
                 "params": extractor.parameters(),
-                "lr": float(ENCODER_LR),
+                "lr": ENCODER_LR,
             },
             {
                 "params": classifier.parameters(),
-                "lr": float(CLASSIFIER_LR),
+                "lr": CLASSIFIER_LR,
             },
         ],
-        weight_decay=float(WEIGHT_DECAY),
+        weight_decay=WEIGHT_DECAY,
     )
-
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    #     optimizer,
-    #     mode=SCHED_MODE,
-    #     factor=float(SCHED_FACTOR),
-    #     patience=int(SCHED_PATIENCE),
-    #     threshold=float(SCHED_THRESHOLD),
-    #     threshold_mode=SCHED_THRESHOLD_MODE,
-    #     cooldown=int(SCHED_COOLDOWN),
-    #     min_lr=float(SCHED_MIN_LR),
-    # )
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer,
         T_0=10,
         T_mult=2,
-        eta_min=float(SCHED_MIN_LR),
+        eta_min=SCHED_MIN_LR,
     )
 
     # Trainer
-    extractor.set_trainable_modules(
-        ["classifier"],
-        classifier,
-    )
+    if not args.resume:
+        extractor.set_trainable_modules(["classifier"], classifier, disable=False)
 
     trainer = Trainer(
         builder=builder,
@@ -375,8 +400,8 @@ def main():
         optimizer=optimizer,
         scheduler=scheduler,
         save_dir=args.save_dir,
-        early_stop_patience=int(EARLY_STOP_PATIENCE),
-        warmup_epochs=int(WARMUP_EPOCHS),
+        early_stop_patience=EARLY_STOP_PATIENCE,
+        warmup_epochs=WARMUP_EPOCHS,
         disable=args.disable,
     )
 
@@ -401,13 +426,6 @@ def main():
             "classifier_lr": optimizer.param_groups[1]["lr"],
             # Scheduler
             "scheduler": scheduler.__class__.__name__,
-            # "scheduler_factor": scheduler.factor,
-            # "scheduler_patience": scheduler.patience,
-            # "scheduler_threshold": scheduler.threshold,
-            # "scheduler_threshold_mode": scheduler.threshold_mode,
-            # "scheduler_cooldown": scheduler.cooldown,
-            # "scheduler_mode": scheduler.mode,
-            # "scheduler_min_lr": scheduler.min_lrs[0],
             "T_0": scheduler.T_0,
             "T_mult": scheduler.T_mult,
             "eta_min": scheduler.eta_min,
@@ -432,26 +450,33 @@ def main():
     if args.model_path is not None:
         start_epoch = trainer.load_checkpoint(args.model_path)
 
+    current_modules = unfreeze_schedule.get(start_epoch, trainable_modules)
+
+    extractor.set_trainable_modules(
+        current_modules,
+        classifier,
+        disable=False if start_epoch != 1 and args.resume else True,
+    )
+
     last_epoch = start_epoch - 1
 
+    total_train_start = perf_counter()
+    epochs_range = range(start_epoch, args.epochs + 1)
+    total_epochs_to_run = len(epochs_range)
+
     # Training
-    for epoch in tqdm(
-        range(start_epoch, args.epochs + 1),
-        desc="Training",
-        total=args.epochs + 1 - start_epoch,
-    ):
+    for i, epoch in enumerate(epochs_range):
         last_epoch = epoch
 
         # ------------------------------------------
         # Progressive unfreezing
         # ------------------------------------------
-        if epoch in unfreeze_schedule:
+        if epoch in unfreeze_schedule and not args.resume:
             print()
             print(f"Epoch {epoch}: updating trainable blocks")
 
             extractor.set_trainable_modules(
-                unfreeze_schedule[epoch],
-                classifier,
+                unfreeze_schedule[epoch], classifier, disable=False
             )
 
         epoch_start = perf_counter()
@@ -487,6 +512,15 @@ def main():
 
         epoch_time = perf_counter() - epoch_start
 
+        epochs_done = i + 1
+        epochs_left = total_epochs_to_run - epochs_done
+
+        avg_epoch_time = (perf_counter() - total_train_start) / epochs_done
+        eta_seconds = avg_epoch_time * epochs_left
+
+        epoch_time_str = str(timedelta(seconds=int(epoch_time)))
+        eta_str = str(timedelta(seconds=int(eta_seconds)))
+
         trainer.append_history(
             epoch=epoch,
             train_loss=train_loss,
@@ -502,7 +536,9 @@ def main():
             f"minDCF={min_dcf:.4f} | "
             f"AUC={roc_auc:.4f} | "
             f"Combined score={combined_score:.4f} | "
-            f"lr={trainer.get_lr():.2e}" + (" (*) BEST" if improved else "")
+            f"lr={trainer.get_lr():.2e} | "
+            f"Time={epoch_time_str} | "
+            f"ETA={eta_str}" + (" (*) BEST" if improved else "")
         )
 
         if trainer.should_stop():

@@ -303,7 +303,7 @@ class Trainer:
     ):
         """
         Warmup:
-            линейно увеличивает LR каждой группы
+            линейно увеличивает LR каждой эпохи'
             с 10% до 100%.
 
         Далее:
@@ -390,9 +390,9 @@ class Trainer:
             3. Максимальный ROC-AUC
         """
 
-        EER_EPS = 1e-3
-        DCF_EPS = 1e-3
-        AUC_EPS = 1e-4
+        EER_EPS = 1e-4
+        DCF_EPS = 1e-4
+        AUC_EPS = 1e-5
 
         eer = checkpoint["eer"]
         min_dcf = checkpoint["min_dcf"]

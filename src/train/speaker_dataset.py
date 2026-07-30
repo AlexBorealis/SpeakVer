@@ -1,6 +1,8 @@
+import json
 import random
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import soundfile as sf
@@ -62,7 +64,7 @@ class SpeakerDataset(Dataset):
         microphones = sample["domains"][config]
 
         microphone = self.microphone
-        if self.shuffle and self.microphone is None:
+        if self.shuffle or self.microphone is None:
             microphone = random.choice(list(microphones))
 
         path = microphones[microphone]
@@ -89,7 +91,7 @@ class SpeakerDataset(Dataset):
 
     def get_mic_type(self):
         config = random.choice(list(self.samples[0]["domains"]))
-        
+
         microphones = self.samples[0]["domains"][config]
         return list(microphones.keys())
 
@@ -193,7 +195,40 @@ class SpeakerDataset(Dataset):
             "domain_distribution": dict(domain_counter),
             "microphone_distribution": dict(microphone_counter),
             "speaker_distribution": speaker_counter,
+            "durations_distribution": durations.tolist(),
         }
+
+    def save_dataset_stats(
+        self,
+        data: dict[str, Any],
+        save_dir: str | Path,
+        file_path: str = "dataset_stats.json",
+    ) -> None:
+        """Преобразует статистику датасета в JSON и сохраняет в файл.
+
+        :param data: Словарь с данными (может содержать объекты Counter).
+        :param file_path: Путь к файлу для сохранения.
+        """
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        
+        full_path = save_dir / file_path
+
+        processed_data = data.copy()
+
+        if "speaker_distribution" in processed_data:
+            if isinstance(processed_data["speaker_distribution"], Counter):
+                processed_data["speaker_distribution"] = dict(
+                    processed_data["speaker_distribution"]
+                )
+
+        # Записываем данные в JSON-файл
+        try:
+            with open(full_path, "w", encoding="utf-8") as f:
+                json.dump(processed_data, f, indent=4, ensure_ascii=False)
+            print(f"Saving complete: {file_path}")
+        except IOError as e:
+            print(f"Error when saving file {file_path}: {e}")
 
     def summary(self):
         print("=" * 60)

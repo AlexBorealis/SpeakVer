@@ -58,7 +58,8 @@ class EmbeddingExtractor(nn.Module):
     def set_trainable_modules(
         self,
         trainable_modules: list[str],
-        classifier=None,
+        classifier: nn.Module = None,
+        disable: bool = True,
     ):
         embedding = self.mods.embedding_model
         modules = self._get_embedding_modules()
@@ -99,64 +100,63 @@ class EmbeddingExtractor(nn.Module):
                 for p in modules[name].parameters():
                     p.requires_grad = True
 
-        # statistics
-        trainable_modules_info = []
+        if not disable:
+            # statistics
+            trainable_modules_info = []
 
-        for name, module in modules.items():
-            if any(p.requires_grad for p in module.parameters()):
-                trainable_modules_info.append(
-                    (
-                        name,
-                        module.__class__.__name__,
+            for name, module in modules.items():
+                if any(p.requires_grad for p in module.parameters()):
+                    trainable_modules_info.append(
+                        (
+                            name,
+                            module.__class__.__name__,
+                        )
                     )
+
+            trainable_params = sum(
+                p.numel() for p in embedding.parameters() if p.requires_grad
+            )
+
+            total_params = sum(p.numel() for p in embedding.parameters())
+
+            print("=" * 60)
+            print("Trainable modules:")
+
+            enabled = 0
+
+            for name, cls_name in trainable_modules_info:
+                enabled += 1
+
+                print(f"  {name:<18}: {cls_name}")
+
+            if classifier is not None:
+                if any(p.requires_grad for p in classifier.parameters()):
+                    print(f"  {'classifier':<18}: {classifier.__class__.__name__}")
+
+            if enabled == 0 and (
+                classifier is None
+                or not any(p.requires_grad for p in classifier.parameters())
+            ):
+                print("  (none)")
+
+            classifier_trainable = 0
+            classifier_total = 0
+
+            if classifier is not None:
+                classifier_trainable = sum(
+                    p.numel() for p in classifier.parameters() if p.requires_grad
                 )
 
-        trainable_params = sum(
-            p.numel() for p in embedding.parameters() if p.requires_grad
-        )
+                classifier_total = sum(p.numel() for p in classifier.parameters())
 
-        total_params = sum(p.numel() for p in embedding.parameters())
+            print()
+            print(f"Embedding params   : {trainable_params:,}/{total_params:,}")
 
-        print("=" * 60)
-        print("Trainable modules:")
-
-        enabled = 0
-
-        for name, cls_name in trainable_modules_info:
-            enabled += 1
-
-            print(f"  {name:<18}: {cls_name}")
-
-        if classifier is not None:
-            if any(p.requires_grad for p in classifier.parameters()):
-                print(f"  {'classifier':<18}: {classifier.__class__.__name__}")
-
-        if enabled == 0 and (
-            classifier is None
-            or not any(p.requires_grad for p in classifier.parameters())
-        ):
-            print("  (none)")
-
-        classifier_trainable = 0
-        classifier_total = 0
-
-        if classifier is not None:
-            classifier_trainable = sum(
-                p.numel() for p in classifier.parameters() if p.requires_grad
-            )
-
-            classifier_total = sum(p.numel() for p in classifier.parameters())
-
-        print()
-
-        print(f"Embedding params     : {trainable_params:,}/{total_params:,}")
-
-        if classifier is not None:
-            print(
-                f"Classifier params    : {classifier_trainable:,}/{classifier_total:,}"
-            )
-
-        print("=" * 60)
+            if classifier is not None:
+                print(
+                    f"Classifier params   : {classifier_trainable:,}/{classifier_total:,}"
+                )
+            print("=" * 60)
 
     def load_encoder_weights(self, checkpoint_path: str):
         print(f"Loading encoder weights: {checkpoint_path}")
