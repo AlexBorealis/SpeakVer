@@ -70,7 +70,13 @@ class BaselineReport:
             rows.append(
                 {
                     "speaker1": sample1["speaker_id"],
+                    "recording1": sample1["recording"],
+                    "audio_path1": sample1.get("audio_path"),
+
                     "speaker2": sample2["speaker_id"],
+                    "recording2": sample2["recording"],
+                    "audio_path2": sample2.get("audio_path"),
+
                     "label": int(label),
                     "cosine_similarity": float(score),
                 }

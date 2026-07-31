@@ -20,7 +20,7 @@ class EmbeddingExtractor(nn.Module):
         self.classifier = EncoderClassifier.from_hparams(
             source=source,
             savedir=savedir,
-            run_opts={"device": str(self.device)},
+            run_opts={"device": str(self.device) if self.device == "cpu" else "cuda:0"},
         )
 
         self.mods = self.classifier.mods
@@ -181,20 +181,22 @@ class EmbeddingExtractor(nn.Module):
         waveforms: torch.Tensor,
         lengths: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        device = next(self.parameters()).device
+
         waveforms = waveforms.to(
-            self.device,
+            device,
             non_blocking=True,
         )
 
         if lengths is None:
             lengths = torch.ones(
                 waveforms.size(0),
-                device=waveforms.device,
+                device=device,
                 dtype=waveforms.dtype,
             )
         else:
             lengths = lengths.to(
-                self.device,
+                device,
                 non_blocking=True,
             )
 

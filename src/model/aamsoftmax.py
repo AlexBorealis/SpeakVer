@@ -25,7 +25,9 @@ class AAMSoftmax(nn.Module):
         self.cos_m = math.cos(margin)
         self.sin_m = math.sin(margin)
 
-    def forward(self, embeddings, labels):
+    def forward(
+        self, embeddings: torch.Tensor, labels: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         cosine = F.linear(F.normalize(embeddings), F.normalize(self.weight))
         cosine = cosine.clamp(-1 + 1e-7, 1 - 1e-7)
 

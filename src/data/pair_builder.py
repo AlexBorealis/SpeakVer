@@ -59,6 +59,8 @@ class PairBuilder:
 
         self.balance = balance
         self.negative_ratio = negative_ratio
+        if self.negative_ratio is not None:
+            max(0.01, negative_ratio)
 
         self.max_positive_pairs = max_positive_pairs
         self.max_negative_pairs = max_negative_pairs

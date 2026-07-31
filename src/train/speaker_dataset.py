@@ -56,7 +56,7 @@ class SpeakerDataset(Dataset):
     def __getitem__(self, index: int):
         sample = self.samples[index]
 
-        if not self.return_audio:
+        if not self.return_audio or self.preprocessor is None:
             return sample
 
         config = random.choice(list(sample["domains"]))
@@ -69,12 +69,14 @@ class SpeakerDataset(Dataset):
 
         path = microphones[microphone]
 
-        waveform, length = self.preprocessor(path)
+        result = self.preprocessor(path)
 
         return {
-            "waveform": waveform.squeeze(0),
+            "waveform": result["waveform"].squeeze(0),
             "speaker": sample["speaker_index"],
-            "length": length,
+            "init_rate": result["init_rate"],
+            "target_rate": result["target_rate"],
+            "length": result["length"],
             "config": config,
             "microphone": microphone,
             "path": path,

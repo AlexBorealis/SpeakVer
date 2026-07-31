@@ -31,13 +31,13 @@ class SpeakerVerifier:
 
     @torch.inference_mode()
     def get_embedding(self, audio_path: str):
-        waveform, _ = self.preprocessor.load_audio(audio_path)
-        embedding = self.model.extract(waveform)
+        result = self.preprocessor(audio_path)
+        embedding = self.model.extract(result["waveform"])
 
         return embedding
 
     @staticmethod
-    def cosine_similarity(emb1, emb2) -> float:
+    def cosine_similarity(emb1: torch.Tensor, emb2: torch.Tensor) -> float:
         score = F.cosine_similarity(emb1, emb2, dim=0)
 
         return float(score.item())

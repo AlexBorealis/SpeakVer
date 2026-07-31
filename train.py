@@ -211,13 +211,22 @@ def main():
         1: [
             "classifier",
         ],
-        4: [
+        3: [
+            "asp",
+            "asp_bn",
+            "fc",
+            "classifier",
+        ],
+        10: [
+            "seres2netblock3",
+            "mfa",
             "asp",
             "asp_bn",
             "fc",
             "classifier",
         ],
         30: [
+            "seres2netblock2",
             "seres2netblock3",
             "mfa",
             "asp",
@@ -297,7 +306,7 @@ def main():
     train_dataset.save_dataset_stats(
         train_dataset_stats,
         save_dir=args.save_dir,
-        file_path="trian_dataset_stats.json",
+        file_path="train_dataset_stats.json",
     )
     val_dataset.save_dataset_stats(
         val_dataset_stats,
@@ -438,9 +447,15 @@ def main():
             "max_duration": train_preprocessor.max_duration
             if train_preprocessor.fix_length
             else None,
-            "max_batch_length": batch_sampler.max_batch_length,
-            "max_batch_size": batch_sampler.max_batch_size,
-            "min_batch_size": batch_sampler.min_batch_size,
+            "max_batch_length": batch_sampler.max_batch_length
+            if batch_sampler is not None
+            else None,
+            "max_batch_size": batch_sampler.max_batch_size
+            if batch_sampler is not None
+            else None,
+            "min_batch_size": batch_sampler.min_batch_size
+            if batch_sampler is not None
+            else None,
         }
     )
 

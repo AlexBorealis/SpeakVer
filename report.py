@@ -4,7 +4,14 @@ from pathlib import Path
 
 import torch
 
-from src.config import REPORTS_DIR
+from src.config import (
+    AAM_MARGIN,
+    AAM_SCALE,
+    CLASSIFIER_LR,
+    ENCODER_LR,
+    REPORTS_DIR,
+    WEIGHT_DECAY,
+)
 from src.data.audio_preprocessor import AudioPreprocessor
 from src.data.baseline_report import BaselineReport
 from src.data.metrics import Metrics
@@ -64,10 +71,24 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--target_sr",
+        type=int,
+        default=8000,
+        help="Target sampling rate.",
+    )
+
+    parser.add_argument(
         "--threshold",
         type=float,
         default=None,
         help="Fixed cosine similarity threshold",
+    )
+
+    parser.add_argument(
+        "--negative_ratio",
+        type=float,
+        default=10,
+        help="How much times negative pairs bigger than positive",
     )
 
     parser.add_argument(
@@ -123,22 +144,33 @@ def main():
     print("=" * 60)
     print()
 
+    # Preprocessing
+    train_preprocessor = AudioPreprocessor(
+        augment=True, target_sr=args.target_sr, fix_length=False, max_duration=7
+    )
+
+    val_preprocessor = AudioPreprocessor(
+        target_sr=args.target_sr, fix_length=False, max_duration=7
+    )
+
+    test_preprocessor = AudioPreprocessor(
+        target_sr=args.target_sr, fix_length=False, max_duration=7
+    )
+
     # Dataset
     test_dataset = SpeakerDataset(
         args.dataset_path,
+        preprocessor=test_preprocessor,
         return_audio=False,
-        microphone=args.microphone
+        microphone=args.microphone,
     )
     dataset_stats = test_dataset.statistics()
-
-    # Preprocessing
-    train_preprocessor = AudioPreprocessor(augment=True)
-    val_preprocessor = AudioPreprocessor()
 
     # Utils
     builder = PairBuilder(
         balance=args.balance,
         disable=args.disable,
+        negative_ratio=args.negative_ratio
     )
     metrics = Metrics()
     plotter = Plotter()
@@ -164,12 +196,22 @@ def main():
     # classifier
     classifier = AAMSoftmax(
         num_classes=test_dataset.get_num_speakers(),
+        margin=AAM_MARGIN,
+        scale=AAM_SCALE,
     )
 
     optimizer = torch.optim.AdamW(
-        list(extractor.parameters()) + list(classifier.parameters()),
-        lr=1e-4,
-        weight_decay=1e-4,
+        [
+            {
+                "params": extractor.parameters(),
+                "lr": ENCODER_LR,
+            },
+            {
+                "params": classifier.parameters(),
+                "lr": CLASSIFIER_LR,
+            },
+        ],
+        weight_decay=WEIGHT_DECAY,
     )
 
     # Trainer
@@ -182,6 +224,7 @@ def main():
         classifier=classifier,
         optimizer=optimizer,
         threshold=args.threshold,
+        device=args.device,
         disable=args.disable,
     )
 

@@ -1,5 +1,4 @@
 import json
-import os
 import random
 import traceback
 from pathlib import Path
@@ -57,7 +56,12 @@ class AudioPreprocessor:
 
         waveform, length = self.process_audio(waveform, sample_rate)
 
-        return waveform, length
+        return {
+            "waveform": waveform,
+            "init_rate": sample_rate,
+            "target_rate": self.target_sr,
+            "length": length,
+        }
 
     def _get_resampler(self, sample_rate: int):
         if sample_rate not in self.resamplers:
@@ -76,18 +80,27 @@ class AudioPreprocessor:
 
         return waveform
 
-    def _augment(self, waveform: torch.Tensor) -> torch.Tensor:
-        if random.random() < 0.5:
-            noise_level = random.uniform(0.002, 0.01)
+    def _augment(
+        self,
+        waveform: torch.Tensor,
+    ) -> torch.Tensor:
+        # Additive Gaussian noise
+        if random.random() <= 0.5:
+            noise_std = random.uniform(0.001, 0.007)
 
-            waveform = waveform + (torch.randn_like(waveform) * noise_level)
+            waveform = waveform + (torch.randn_like(waveform) * noise_std)
 
-        if random.random() < 0.5:
-            gain = random.uniform(0.8, 1.2)
+        # Random gain
+        if random.random() <= 0.5:
+            gain = random.uniform(0.9, 1.1)
 
             waveform = waveform * gain
 
-        return torch.clamp(waveform, -1, 1)
+        # Random polarity inversion
+        if random.random() <= 0.5:
+            waveform = -waveform
+
+        return waveform.clamp_(-1.0, 1.0)
 
     def load_audio(
         self,
@@ -147,6 +160,8 @@ class AudioPreprocessor:
             Итоговая длина после обработки
             (в количестве сэмплов).
         """
+        if self.fix_length:
+            waveform = self._fix_length(waveform)
 
         if self.mono and waveform.shape[0] > 1:
             waveform = waveform.mean(dim=0, keepdim=True)
@@ -157,13 +172,6 @@ class AudioPreprocessor:
 
         if self.remove_dc:
             waveform = waveform - waveform.mean()
-
-        if self.peak_normalize:
-            peak = waveform.abs().amax()
-
-            if peak > 0:
-                waveform = waveform / peak
-                waveform *= self.target_peak
 
         if self.vad:
             try:
@@ -180,33 +188,21 @@ class AudioPreprocessor:
             except Exception:
                 pass
 
+        if self.peak_normalize:
+            peak = waveform.abs().amax()
+
+            if peak > 0:
+                waveform = waveform / peak
+                waveform *= self.target_peak
+
         if self.augment:
             waveform = self._augment(waveform)
 
-        if self.fix_length:
-            waveform = self._fix_length(waveform)
-
         return waveform, waveform.shape[-1]
-
-    def save_audio(
-        self, audio_input, output_dir: str = "debug_audio", filename: str = "sample.wav"
-    ) -> str:
-        os.makedirs(output_dir, exist_ok=True)
-
-        waveform, sr = self.load_audio(audio_input)
-
-        if not filename.lower().endswith(".wav"):
-            filename += ".wav"
-
-        path = os.path.join(output_dir, filename)
-
-        torchaudio.save(path, waveform.cpu(), sr)
-
-        return path
 
     def save_samples(
         self,
-        samples,
+        samples: list,
         output_dir: str = "speaker_dataset",
     ) -> tuple[int, int]:
 

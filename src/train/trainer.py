@@ -223,9 +223,9 @@ class Trainer:
                 microphone = random.choice(list(microphones))
                 audio_path = microphones[microphone]
 
-            waveform, _ = self.val_preprocessor(audio_path)
+            result = self.val_preprocessor(audio_path)
 
-            emb = self.encoder.extract(waveform)
+            emb = self.encoder.extract(result["waveform"])
             emb = emb.squeeze(0).cpu()
             embeddings.append(emb)
 
@@ -249,6 +249,9 @@ class Trainer:
                 pair["sample2"]["speaker_id"],
                 pair["sample2"]["recording"],
             )
+
+            pair["sample1"]["audio_path"] = self.val_unique_samples[key1]["audio_path"]
+            pair["sample2"]["audio_path"] = self.val_unique_samples[key2]["audio_path"]
 
             idx1.append(sample_to_idx[key1])
             idx2.append(sample_to_idx[key2])
@@ -390,9 +393,9 @@ class Trainer:
             3. Максимальный ROC-AUC
         """
 
-        EER_EPS = 1e-4
+        EER_EPS = 1e-3
         DCF_EPS = 1e-4
-        AUC_EPS = 1e-5
+        AUC_EPS = 1e-4
 
         eer = checkpoint["eer"]
         min_dcf = checkpoint["min_dcf"]

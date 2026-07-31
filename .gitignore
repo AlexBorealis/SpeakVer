@@ -10,6 +10,7 @@ datasets
 archives
 runs
 reports
+config
 .continue
 .gradio
 .ruff_cache

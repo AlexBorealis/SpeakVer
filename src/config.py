@@ -8,33 +8,27 @@ from dotenv import load_dotenv
 # ============================================================
 BASE_DIR = Path(__file__).resolve().parents[1]
 
-CONFIG_DIR = BASE_DIR / "config"
-ENV_DIR = CONFIG_DIR / "envs"
-ENV_PATH = ENV_DIR / ".env"
+ENV_DIR = BASE_DIR / "config" / "envs"
 
-load_dotenv(ENV_PATH)
+load_dotenv(ENV_DIR / ".env")
 
 # ============================================================
 # Environment
 # ============================================================
+HF_TOKEN = os.getenv("HF_TOKEN")
+
+DATASET_DIR = BASE_DIR / "datasets"
+ARCHIVES_DIR = BASE_DIR / "archives"
+REPORTS_DIR = BASE_DIR / "reports"
+RUNS_DIR = BASE_DIR / "runs"
+DEFAULT_REPORT_DATASET = "datasets/test" 
+
 DEFAULT_THRESHOLD = float(os.getenv("DEFAULT_THRESHOLD", "0.15"))
 
 DEFAULT_DEVICE = os.getenv(
     "DEFAULT_DEVICE",
     "cpu",
 )
-
-DEFAULT_REPORT_DATASET = os.getenv(
-    "DEFAULT_REPORT_DATASET",
-    "datasets/test",
-)
-
-HF_TOKEN = os.getenv("HF_TOKEN")
-
-ARCHIVES_DIR = BASE_DIR / "archives"
-REPORTS_DIR = BASE_DIR / "reports"
-
-RUNS_DIR = Path(os.getenv("RUNS_DIR", "runs"))
 
 # Gradio parameters
 SERVER_NAME = os.getenv(
